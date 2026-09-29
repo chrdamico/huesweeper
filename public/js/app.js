@@ -5,7 +5,7 @@ import { Game, swatch } from './game.js';
 import { icon } from './icons.js';
 import { PALETTES, paletteFor, textOn } from './palettes.js';
 import { RULE_INFO, rulesOf, DIFF_NAMES } from './rules-info.js';
-import { initPWA, isStandalone, isIOS, canPrompt, promptInstall, onInstallChange } from './pwa.js';
+import { initPWA, isStandalone, isIOS, canPrompt, promptInstall } from './pwa.js';
 import { generateAsync } from './gen-client.js';
 import { dailyParams, dateKey, streak, lastDays } from './daily.js';
 import { miniBoard, pictureMini, silhouetteMini, demo } from './mini.js';
@@ -105,11 +105,6 @@ function route() {
     }
   }
   homeScreen();
-}
-
-function rerender() {
-  rendered = null;
-  route();
 }
 
 function screen(cls, { title = '', parent = null, right = '' }, body) {
@@ -299,7 +294,6 @@ function homeScreen() {
     </div>`,
   );
   wireInstall(el);
-  cleanupFns.push(onInstallChange(() => rendered === '' && rerender()));
 }
 
 function campaignScreen() {

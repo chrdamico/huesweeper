@@ -1,5 +1,4 @@
 let deferred = null;
-const listeners = new Set();
 
 export function isStandalone() {
   return matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
@@ -13,19 +12,11 @@ export function canPrompt() {
   return !!deferred;
 }
 
-export function onInstallChange(fn) {
-  listeners.add(fn);
-  return () => listeners.delete(fn);
-}
-
-const notify = () => listeners.forEach((fn) => fn());
-
 export async function promptInstall() {
   if (!deferred) return false;
   deferred.prompt();
   const { outcome } = await deferred.userChoice;
   deferred = null;
-  notify();
   return outcome === 'accepted';
 }
 
@@ -33,11 +24,9 @@ export function initPWA({ onUpdate } = {}) {
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferred = e;
-    notify();
   });
   window.addEventListener('appinstalled', () => {
     deferred = null;
-    notify();
   });
   if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
   const hadController = !!navigator.serviceWorker.controller;
