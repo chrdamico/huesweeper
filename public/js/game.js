@@ -1,4 +1,5 @@
 import { prepare, isEditable, hasClue } from './board.js';
+import { hashString } from './rng.js';
 import { buildModel } from './solver.js';
 import { findHint, hintSources, hintText } from './hint.js';
 import { applyPalette } from './palettes.js';
@@ -24,7 +25,8 @@ export class Game {
     this.board = new Int8Array(N).fill(-1);
     this.notes = new Uint8Array(N);
     for (let i = 0; i < N; i++) if (!isEditable(this.kind[i])) this.board[i] = sol[i];
-    const saved = opts.saved;
+    this.sig = hashString(puzzle.sol + puzzle.kind).toString(36);
+    const saved = opts.saved && (!opts.saved.s || opts.saved.s === this.sig) ? opts.saved : null;
     if (saved && saved.b && saved.b.length === N) {
       for (let i = 0; i < N; i++) {
         if (!isEditable(this.kind[i])) continue;
@@ -88,6 +90,7 @@ export class Game {
       else if (a === 'hint') this.showHint();
       else if (a === 'restart') this.opts.onRestart?.();
     });
+    this.layout();
     this.ro = new ResizeObserver(() => this.layout());
     this.ro.observe(this.wrapEl);
     this.onKey = (e) => this.key(e);
@@ -662,7 +665,7 @@ export class Game {
       b += ed ? (this.board[i] < 0 ? '-' : String(this.board[i])) : '.';
       n += this.notes[i].toString(16);
     }
-    return { b, n, t: Math.round(this.time()), h: this.hints };
+    return { b, n, t: Math.round(this.time()), h: this.hints, s: this.sig };
   }
 
   save() {

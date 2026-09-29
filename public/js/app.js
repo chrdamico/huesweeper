@@ -864,6 +864,7 @@ function pickCheer() {
 }
 
 applyTheme();
+if (isStandalone()) navigator.storage?.persist?.().catch(() => {});
 initPWA({
   onUpdate: () => toast('Huesweeper was updated.', { action: 'Reload', onAction: () => location.reload(), ms: 8000 }),
 });
