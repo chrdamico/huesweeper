@@ -350,7 +350,7 @@ h3.section { margin: 8px 0 0; font-size: 18px; }
 [data-c="2"] > .sym { clip-path: polygon(50% 0, 100% 100%, 0 100%); border-radius: 0; }
 [data-c="3"] > .sym { clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); border-radius: 0; }
 
-.board.focusing .cell:not(.nb):not(.focus-src) { opacity: 0.32; }
+.board.focusing .cell:not(.nb):not(.focus-src) { opacity: 0.5; }
 .cell.nb::after, .cell.focus-src::after {
   content: ''; position: absolute; inset: -3px; border-radius: calc(var(--r) + 3px);
   border: 2.5px solid var(--ink); pointer-events: none;

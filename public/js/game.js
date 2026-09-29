@@ -170,6 +170,9 @@ export class Game {
       b.appendChild(s);
     }
     b.addEventListener('pointerdown', (e) => this.down(e));
+    this.wrapEl.addEventListener('pointerdown', (e) => {
+      if (this.focus >= 0 && !e.target.closest('.cell')) this.setFocus(-1);
+    });
     b.addEventListener('pointermove', (e) => this.move(e));
     b.addEventListener('pointerup', (e) => this.up(e));
     b.addEventListener('pointercancel', (e) => this.up(e, true));
@@ -345,7 +348,19 @@ export class Game {
     this.hist.push(ch);
     if (this.hist.length > 400) this.hist.shift();
     this.fut = [];
+    this.releaseFocus(ch);
     this.afterChange();
+  }
+
+  releaseFocus(ch) {
+    const f = this.focus;
+    if (f < 0) return;
+    const nbs = this.prep.nbs[f];
+    const inside = new Set(nbs);
+    inside.add(f);
+    const strayed = ch.some(([i]) => !inside.has(i));
+    const done = nbs.every((j) => this.board[j] >= 0);
+    if (strayed || done) this.setFocus(-1);
   }
 
   afterChange() {
