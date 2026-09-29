@@ -2,6 +2,8 @@
 
 A colour logic puzzle for the phone, inspired by *ColorSweeper*. Installable as a PWA, works offline, no build step.
 
+**Play:** https://chrdamico.github.io/huesweeper/
+
 Each number counts how many of its neighbours share the number's own colour. Colour every empty cell so all numbers are right. Every puzzle has exactly one solution and never needs a guess.
 
 ## Content
