@@ -532,7 +532,8 @@ export class Game {
     this.setFocus(-1);
     this.clearHint();
     const { w } = this.p;
-    const last = this.hist.length ? this.hist[this.hist.length - 1].at(-1)[0] : 0;
+    const lastCh = this.hist[this.hist.length - 1];
+    const last = lastCh && lastCh.length ? lastCh[lastCh.length - 1][0] : 0;
     const lx = last % w;
     const ly = (last / w) | 0;
     for (let i = 0; i < this.N; i++) {
@@ -552,6 +553,12 @@ export class Game {
       this.idle(true);
     }, 650);
     this.opts.onWin?.(res);
+  }
+
+  demoFocus() {
+    const h = findHint(this.model, this.prep, this.board);
+    const src = h && h.type !== 'wrong' ? hintSources(h)[0] : -1;
+    if (src >= 0 && this.kind[src] === 'g') this.setFocus(src);
   }
 
   showHint() {

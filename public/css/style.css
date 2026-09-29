@@ -562,7 +562,7 @@ h3.section { margin: 8px 0 0; font-size: 18px; }
 .pal-sw i { width: 13px; height: 13px; border-radius: 4px; }
 
 .resume { width: 100%; }
-.sticky-actions { position: sticky; bottom: calc(10px + env(safe-area-inset-bottom)); }
+.sticky-actions { position: sticky; bottom: 0; padding: 18px 0 calc(10px + env(safe-area-inset-bottom)); margin-bottom: -10px; background: linear-gradient(to bottom, transparent, var(--bg) 40%); z-index: 2; }
 
 .daily-card h2 { margin: 4px 0 12px; font-size: 26px; }
 .daily-card .chips { margin-bottom: 16px; }

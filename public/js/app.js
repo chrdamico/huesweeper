@@ -736,6 +736,7 @@ function playScreen(id) {
     onWin: (res) => onWin(mode, id, puzzle, res, pl),
   });
   game.mount(host);
+  if (mode === 'campaign' && pl.w === 0 && pl.l < 2 && !saves[saveKey] && !db.done[id]) game.demoFocus();
   el.querySelector('.help-btn').addEventListener('click', () => {
     const rules = rulesOf(puzzle);
     sheet({
