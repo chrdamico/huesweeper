@@ -47,7 +47,7 @@ export function hintText(h, prep, sw) {
     case 'fill':
       return `This ${num(s.src)} needs all its open neighbours to be ${sw(s.k)} to reach its count.`;
     case 'clear':
-      return `This ${num(s.src)} already sees enough ${sw(s.k)}, so its other neighbours aren’t ${sw(s.k)}. This one is ${target}.`;
+      return `This ${num(s.src)} already has enough ${sw(s.k)} around it, so the rest aren\u2019t ${sw(s.k)}. This one is ${target}.`;
     case 'mask':
       return `This hidden clue ${num(s.src)} can only be ${target}: any other colour breaks its count.`;
     case 'pair':

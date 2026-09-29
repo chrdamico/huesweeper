@@ -234,6 +234,13 @@ export class Game {
     const i = this.cellAt(e.clientX, e.clientY);
     if (i < 0) return;
     e.preventDefault();
+    if (this.stroke) {
+      const prev = this.stroke;
+      clearTimeout(this.pressTimer);
+      this.stroke = null;
+      this.commit(prev.ch);
+      if (this.solved) return;
+    }
     try {
       this.boardEl.setPointerCapture(e.pointerId);
     } catch {}
@@ -582,7 +589,7 @@ export class Game {
     for (const s of srcs) if (s !== h.cell) this.cells[s]._hint = 'hint-src';
     for (const j of this.hintCells) this.updateCell(j);
     const text = hintText(h, this.prep, swatch);
-    this.setMsg(`${icon('bulb', 'msg-i')}<span>${text}${h.type === 'wrong' ? '' : ' <em>Tap the bulb again to fill it in.</em>'}</span>`, 'hint');
+    this.setMsg(`${icon('bulb', 'msg-i')}<span>${text}${h.type === 'wrong' ? '' : ' <em>Tap Hint again to fill it.</em>'}</span>`, 'hint');
     sfx.hint();
     this.save();
   }

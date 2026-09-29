@@ -529,8 +529,7 @@ function endlessScreen() {
     };
     try {
       const p = await generateAsync(params);
-      db.endless.puzzle = p;
-      persist();
+      setEndless(p);
       go('play/endless');
     } catch (err) {
       console.error(err);
@@ -700,6 +699,7 @@ function playScreen(id) {
     title = 'Daily';
     parent = 'daily';
     saveKey = `daily-${key}`;
+    pl = { key };
   } else if (id === 'endless') {
     mode = 'endless';
     puzzle = db.endless.puzzle;
@@ -805,7 +805,7 @@ function onWin(mode, id, puzzle, res, pl) {
       cls: 'win',
     });
   } else if (mode === 'daily') {
-    const key = dateKey();
+    const key = pl.key;
     if (!db.daily.history[key]) db.daily.history[key] = { t: Math.round(res.time), h: res.hints };
     recordDone(`daily-${key}`, res);
     const st = streak(db.daily.history, key);
@@ -836,6 +836,16 @@ function onWin(mode, id, puzzle, res, pl) {
   }
 }
 
+function setEndless(p) {
+  const keep = `endless-${p.seed}`;
+  for (const k of Object.keys(db.saves)) if (k.startsWith('endless-') && k !== keep) delete db.saves[k];
+  for (const k of Object.keys(db.done)) if (k.startsWith('endless-') && k !== keep) delete db.done[k];
+  const cutoff = lastDays(14)[0];
+  for (const k of Object.keys(db.saves)) if (k.startsWith('daily-') && k.slice(6) < cutoff) delete db.saves[k];
+  db.endless.puzzle = p;
+  persist();
+}
+
 async function anotherEndless() {
   const p = db.endless.puzzle;
   const params = { w: p.w, h: p.h, c: p.c, diff: p.diff, nb: p.nb || 'king', sym: p.sym || null, wrap: !!p.wrap, silent: p.kind.includes('p'), mystery: p.kind.includes('m'), attempts: 6 };
@@ -845,8 +855,7 @@ async function anotherEndless() {
   params.seed = (Math.random() * 2 ** 31) >>> 0;
   toast('Creating a new puzzle…', { ms: 1200 });
   try {
-    db.endless.puzzle = await generateAsync(params);
-    persist();
+    setEndless(await generateAsync(params));
     rendered = null;
     go('play/endless', true);
   } catch {
