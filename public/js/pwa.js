@@ -34,6 +34,16 @@ export function initPWA({ onUpdate } = {}) {
     if (hadController) onUpdate?.();
   });
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    navigator.serviceWorker
+      .register('./sw.js')
+      .then((reg) => {
+        let last = Date.now();
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState !== 'visible' || Date.now() - last < 10 * 60 * 1000) return;
+          last = Date.now();
+          reg.update().catch(() => {});
+        });
+      })
+      .catch(() => {});
   });
 }
