@@ -5,7 +5,7 @@ import { PICTURES, pictureSolution } from '../public/js/pictures.js';
 import { generatePuzzle, verifyPuzzle } from '../public/js/generator.js';
 import { hashString } from '../public/js/rng.js';
 
-const KEEP = ['w', 'h', 'c', 'nb', 'wrap', 'sym', 'sol', 'kind', 'level'];
+const KEEP = ['w', 'h', 'c', 'nb', 'wrap', 'sym', 'shapes', 'inv', 'tally', 'sol', 'kind', 'tl', 'level'];
 const pick = (p, extra) => Object.assign(Object.fromEntries(KEEP.filter((k) => p[k] !== undefined).map((k) => [k, p[k]])), extra);
 
 function describe(p) {
@@ -14,9 +14,10 @@ function describe(p) {
   return `${p.w}x${p.h} c${p.c} lvl${p.level} blank ${n['.']}/${p.w * p.h} p${n.p} m${n.m}`;
 }
 
-const campaign = WORLDS.map((W, wi) =>
+const t0 = Date.now();
+const campaign = WORLDS.map((W) =>
   W.levels.map((lv, li) => {
-    const id = levelId(wi, li);
+    const id = levelId(W.key, li);
     const p = generatePuzzle({ c: 2, ...W.rules, ...lv, seed: hashString(id), attempts: 24 });
     if (!verifyPuzzle(p)) throw new Error(`bad ${id}`);
     console.log(id.padEnd(6), `diff${lv.diff}`, describe(p));
@@ -42,4 +43,4 @@ const gallery = PICTURES.map((pic) => {
 
 const out = fileURLToPath(new URL('../public/js/levels-data.js', import.meta.url));
 writeFileSync(out, `export const CAMPAIGN = ${JSON.stringify(campaign)};\nexport const GALLERY = ${JSON.stringify(gallery)};\n`);
-console.log('wrote', out);
+console.log('wrote', out, `${campaign.flat().length} levels, ${gallery.length} pictures, ${Date.now() - t0}ms`);

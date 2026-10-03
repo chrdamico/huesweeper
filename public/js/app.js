@@ -1,5 +1,5 @@
-import { db, persist, resetAll } from './store.js';
-import { WORLDS, WORLD_UNLOCK, levelId } from './campaign.js';
+import { db, persist, resetAll, touchSettings, exportCode, importCode, onExternalChange } from './store.js';
+import { WORLDS, WORLD_UNLOCK, GROUPS } from './campaign.js';
 import { CAMPAIGN, GALLERY } from './levels-data.js';
 import { Game, swatch } from './game.js';
 import { icon } from './icons.js';
@@ -11,7 +11,7 @@ import { dailyParams, dateKey, streak, lastDays } from './daily.js';
 import { miniBoard, pictureMini, silhouetteMini, demo } from './mini.js';
 import { sfx } from './sound.js';
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const app = document.getElementById('app');
 const sheetRoot = document.getElementById('sheet-root');
 const toastEl = document.getElementById('toast');
@@ -107,6 +107,11 @@ function route() {
   homeScreen();
 }
 
+function rerender() {
+  rendered = null;
+  route();
+}
+
 function screen(cls, { title = '', parent = null, right = '' }, body) {
   app.innerHTML = `<section class="screen scr-${cls}">
     <header class="topbar">
@@ -188,24 +193,26 @@ function ruleSheet(rule) {
   });
 }
 
+const WORLD_INDEX = new Map(WORLDS.map((W, i) => [W.key, i]));
+
 function worldSolved(w) {
   return CAMPAIGN[w].filter((p) => db.done[p.id]).length;
 }
 
 function worldUnlocked(w) {
-  return w === 0 || worldSolved(w - 1) >= WORLD_UNLOCK;
+  return !!db.settings.unlockAll || w === 0 || worldSolved(w - 1) >= WORLD_UNLOCK;
 }
 
-function levelUnlocked(w, l) {
-  return worldUnlocked(w) && (l === 0 || !!db.done[CAMPAIGN[w][l - 1].id] || !!db.done[CAMPAIGN[w][l].id]);
+function firstOpen(w) {
+  const l = CAMPAIGN[w].findIndex((p) => !db.done[p.id]);
+  return l;
 }
 
 function nextCampaignLevel() {
   for (let w = 0; w < CAMPAIGN.length; w++) {
     if (!worldUnlocked(w)) continue;
-    for (let l = 0; l < CAMPAIGN[w].length; l++) {
-      if (!db.done[CAMPAIGN[w][l].id] && levelUnlocked(w, l)) return { w, l };
-    }
+    const l = firstOpen(w);
+    if (l >= 0) return { w, l };
   }
   return null;
 }
@@ -213,10 +220,14 @@ function nextCampaignLevel() {
 function parseLevel(id) {
   const m = id.match(/^w(\d+)-(\d+)$/);
   if (!m) return null;
-  const w = +m[1] - 1;
+  const w = WORLD_INDEX.get(+m[1]);
   const l = +m[2] - 1;
-  if (!CAMPAIGN[w] || !CAMPAIGN[w][l]) return null;
+  if (w == null || !CAMPAIGN[w][l]) return null;
   return { w, l };
+}
+
+function worldRoute(w) {
+  return `world/${WORLDS[w].key}`;
 }
 
 function totalSolved() {
@@ -297,31 +308,48 @@ function homeScreen() {
 }
 
 function campaignScreen() {
-  const cards = WORLDS.map((W, w) => {
+  let html = '';
+  let group = null;
+  WORLDS.forEach((W, w) => {
+    if (W.group !== group) {
+      group = W.group;
+      html += `<h3 class="section">${GROUPS[group]}</h3>`;
+    }
     const open = worldUnlocked(w);
     const n = worldSolved(w);
     const len = CAMPAIGN[w].length;
-    return `<button class="world-card ${open ? '' : 'locked'}" ${open ? `data-go="world/${w}"` : 'disabled'} style="--wc:var(--c${w % 4});--wt:var(--t${w % 4})">
+    html += `<button class="world-card ${open ? '' : 'locked'}" ${open ? `data-go="${worldRoute(w)}"` : 'disabled'} style="--wc:var(--c${w % 4});--wt:var(--t${w % 4})">
       <span class="w-num">${open ? w + 1 : icon('lock')}</span>
       <span class="w-body"><b>${W.name}</b><small>${open ? W.tagline : `Solve ${WORLD_UNLOCK} in ${WORLDS[w - 1].name} to unlock`}</small>
         <span class="bar"><i style="width:${(n / len) * 100}%"></i></span></span>
       <span class="w-count">${n === len ? icon('check') : `${n}/${len}`}</span>
     </button>`;
-  }).join('');
-  screen('campaign', { title: 'Campaign', parent: '' }, `<div class="worlds">${cards}</div>`);
+  });
+  const locked = WORLDS.some((_, w) => !worldUnlocked(w));
+  const el = screen(
+    'campaign',
+    { title: 'Campaign', parent: '' },
+    `<div class="worlds">${html}</div>${locked ? `<button class="btn ghost unlock-all">${icon('lock')}Unlock all worlds</button>` : ''}`,
+  );
+  el.querySelector('.unlock-all')?.addEventListener('click', () => {
+    db.settings.unlockAll = true;
+    touchSettings();
+    toast('All worlds unlocked. You can turn this off in Settings.');
+    rerender();
+  });
 }
 
-function worldScreen(ws) {
-  const w = +ws;
-  if (!WORLDS[w] || !worldUnlocked(w)) return go('campaign', true);
+function worldScreen(key) {
+  const w = WORLD_INDEX.get(+key);
+  if (w == null || !worldUnlocked(w)) return go('campaign', true);
   const W = WORLDS[w];
-  const rules = rulesOf({ ...CAMPAIGN[w][0], kind: CAMPAIGN[w].map((p) => p.kind).join('') });
+  let rules = [...new Set(CAMPAIGN[w].flatMap((p) => rulesOf(p)))];
+  if (rules.length > 1) rules = rules.filter((r) => r !== 'classic');
+  const curL = firstOpen(w);
   const tiles = CAMPAIGN[w].map((p, l) => {
     const d = db.done[p.id];
-    const open = levelUnlocked(w, l);
-    const cur = open && !d && (l === 0 || db.done[CAMPAIGN[w][l - 1].id]);
-    return `<button class="lvl ${d ? 'done' : ''} ${cur ? 'cur' : ''}" ${open ? `data-go="play/${p.id}"` : 'disabled'} aria-label="Level ${l + 1}">
-      <b>${open ? l + 1 : icon('lock')}</b>
+    return `<button class="lvl ${d ? 'done' : ''} ${l === curL ? 'cur' : ''}" data-go="play/${p.id}" aria-label="Level ${l + 1}">
+      <b>${l + 1}</b>
       <small>${p.w}×${p.h}</small>
       ${d ? `<span class="lvl-badge">${d.h ? icon('check') : icon('star')}</span>` : ''}
     </button>`;
@@ -360,7 +388,7 @@ function dailyScreen() {
   const doneToday = db.daily.history[today];
   const st = streak(db.daily.history, today);
   const days = lastDays(7, today);
-  const fake = { ...opts, kind: opts.silent ? 'p' : opts.mystery ? 'm' : '' };
+  const fake = { ...opts, kind: opts.silent ? 'p' : opts.mystery ? 'm' : 'g', inv: opts.contrast ? '1' : undefined };
   const rules = rulesOf(fake);
   const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
   const el = screen(
@@ -434,10 +462,83 @@ const SIZES = [
   { id: 'xl', label: '9×13', w: 9, h: 13 },
 ];
 
-const ENDLESS_DEFAULT = { size: 'm', diff: 2, c: 2, nb: 'king', sym: '', wrap: false, silent: false, mystery: false };
+const ENDLESS_DEFAULT = { size: 'm', diff: 2, c: 2, nb: 'king', sym: '', wrap: false, silent: false, mystery: false, contrast: false, tally: false };
+
+const MECHS = ['classic', 'c3', 'c4', 'mirror', 'rot', 'cross', 'diag', 'knight', 'shapes', 'wrap', 'silent', 'masks', 'contrast', 'tally'];
+const MECH_GROUP = { c3: 'col', c4: 'col', mirror: 'sym', rot: 'sym', cross: 'nb', diag: 'nb', knight: 'nb', shapes: 'nb' };
+const MIX_DEFAULT = { diff: 2, allowed: MECHS.slice(), max: 2 };
+const MIX_SIZES = {
+  1: [[5, 5], [6, 6]],
+  2: [[7, 7], [7, 8], [8, 8]],
+  3: [[8, 8], [8, 9], [9, 9], [9, 11]],
+};
 
 function endlessOpts() {
   return { ...ENDLESS_DEFAULT, ...(db.endless.opts || {}) };
+}
+
+function mixOpts() {
+  const m = { ...MIX_DEFAULT, ...(db.endless.mix || {}) };
+  m.allowed = m.allowed.filter((x) => MECHS.includes(x));
+  return m;
+}
+
+function newSeed() {
+  return (Math.random() * 2 ** 31) >>> 0;
+}
+
+function applyMech(o, id) {
+  const set = {
+    c3: { c: 3 }, c4: { c: 4 }, mirror: { sym: 'mirror' }, rot: { sym: 'rot' },
+    cross: { nb: 'cross' }, diag: { nb: 'diag' }, knight: { nb: 'knight' }, shapes: { nb: 'mixed' },
+    wrap: { wrap: true }, silent: { silent: true }, masks: { mystery: true }, contrast: { contrast: true }, tally: { tally: true },
+  }[id];
+  Object.assign(o, set);
+}
+
+function mixParams(m) {
+  const pick = (a) => a[Math.floor(Math.random() * a.length)];
+  const [w, h] = pick(MIX_SIZES[m.diff] || MIX_SIZES[2]);
+  const o = { w, h, c: 2, diff: m.diff, nb: 'king', sym: null, seed: newSeed(), attempts: 6 };
+  const weights = m.max === 1 ? [0.2, 0.8] : m.max === 2 ? [0.15, 0.45, 0.4] : [0.1, 0.3, 0.35, 0.25];
+  let k = 0;
+  let x = Math.random();
+  while (k < weights.length - 1 && x >= weights[k]) {
+    x -= weights[k];
+    k++;
+  }
+  const pool = m.allowed.filter((id) => id !== 'classic');
+  if (k === 0 && pool.length && !m.allowed.includes('classic')) k = 1;
+  const groups = new Set();
+  let n = 0;
+  while (n < k && pool.length) {
+    const id = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
+    const g = MECH_GROUP[id];
+    if (g && groups.has(g)) continue;
+    if (g) groups.add(g);
+    applyMech(o, id);
+    n++;
+  }
+  return o;
+}
+
+function customParams(o) {
+  const size = SIZES.find((s) => s.id === o.size) || SIZES[1];
+  return {
+    w: size.w,
+    h: size.h,
+    c: o.c,
+    diff: o.diff,
+    nb: o.nb,
+    sym: o.sym || null,
+    wrap: o.wrap,
+    silent: o.silent,
+    mystery: o.mystery,
+    contrast: o.contrast,
+    tally: o.tally,
+    seed: newSeed(),
+    attempts: 6,
+  };
 }
 
 function seg(name, options, value) {
@@ -452,100 +553,126 @@ function toggle(name, label, desc, on) {
 
 function endlessScreen() {
   const o = endlessOpts();
+  const m = mixOpts();
+  const tab = db.endless.tab === 'custom' ? 'custom' : 'mix';
   const cur = db.endless.puzzle;
   const curSolved = cur && db.done[`endless-${cur.seed}`];
   const solved = db.endless.solved || {};
+  const allowed = new Set(m.allowed);
   const el = screen(
     'endless',
     { title: 'Endless', parent: '' },
     `${cur && !curSolved ? `<button class="btn big resume" data-go="play/endless">${icon('play')}<span><small>Resume</small>${cur.w}×${cur.h} · ${DIFF_NAMES[cur.diff]}</span></button>` : ''}
-    <div class="card form">
+    <div class="tabs">${seg('tab', [['mix', 'Quick mix'], ['custom', 'Custom']], tab)}</div>
+    <div class="card form mix-form" ${tab === 'mix' ? '' : 'hidden'}>
+      <h3>Difficulty</h3>
+      ${seg('diff', [[1, 'Easy'], [2, 'Medium'], [3, 'Hard']], m.diff)}
+      <h3>Allowed rules</h3>
+      <div class="mechs">${MECHS.map((id) => `<button class="mech ${allowed.has(id) ? 'on' : ''}" data-m="${id}">${icon('check', 'mech-i')}${RULE_INFO[id].label}</button>`).join('')}</div>
+      <div class="mech-links"><button class="link" data-all="1">Allow all</button><button class="link" data-all="0">Classic only</button></div>
+      <h3>Rules per board</h3>
+      ${seg('max', [[1, 'One'], [2, 'Up to 2'], [3, 'Up to 3']], m.max)}
+      <p class="muted small">Each board gets a size that fits the difficulty and a random mix of the allowed rules. Turn off Classic to always get at least one rule.</p>
+    </div>
+    <div class="card form custom-form" ${tab === 'custom' ? '' : 'hidden'}>
       <h3>Board</h3>
-      ${seg('size', SIZES.map((s) => [s.id, s.label]), o.size)}
+      ${seg('size', SIZES.map((x) => [x.id, x.label]), o.size)}
       <h3>Difficulty</h3>
       ${seg('diff', [[1, 'Easy'], [2, 'Medium'], [3, 'Hard']], o.diff)}
       <h3>Colours</h3>
       ${seg('c', [[2, 'Two'], [3, 'Three'], [4, 'Four']], o.c)}
       <h3>Numbers count</h3>
-      ${seg('nb', [['king', '8 around'], ['cross', '4 sides'], ['knight', 'Knight']], o.nb)}
+      ${seg('nb', [['king', 'All 8'], ['cross', 'Sides'], ['diag', 'Diagonal'], ['knight', 'Knight'], ['mixed', 'Mixed']], o.nb)}
       <h3>Symmetry</h3>
       ${seg('sym', [['', 'None'], ['mirror', 'Mirror'], ['rot', 'Point']], o.sym)}
       <div class="toggles">
         ${toggle('wrap', 'Wraparound', 'Edges connect to the opposite side', o.wrap)}
         ${toggle('silent', 'Silent cells', 'Some givens show no number', o.silent)}
         ${toggle('mystery', 'Masks', 'Some numbers hide their colour', o.mystery)}
+        ${toggle('contrast', 'Contrast', 'Some numbers count different colours', o.contrast)}
+        ${toggle('tally', 'Tallies', 'Row and column totals outside the board', o.tally)}
       </div>
     </div>
     <div class="row sticky-actions">
-      <button class="btn surprise">${icon('dice')}Surprise me</button>
-      <button class="btn primary new-btn">${icon('refresh')}New puzzle</button>
+      <button class="btn primary new-btn">${icon('refresh')}<span>New board</span></button>
     </div>
     <p class="muted center">Solved: ${solved[1] || 0} easy · ${solved[2] || 0} medium · ${solved[3] || 0} hard</p>`,
   );
-  const form = el.querySelector('.form');
-  form.addEventListener('click', (e) => {
+  const mixForm = el.querySelector('.mix-form');
+  const customForm = el.querySelector('.custom-form');
+  const saveMix = () => {
+    m.allowed = MECHS.filter((id) => allowed.has(id));
+    db.endless.mix = { ...m };
+    db.endless.mixAt = Date.now();
+    persist();
+  };
+  const saveCustom = () => {
+    db.endless.opts = { ...o };
+    db.endless.optsAt = Date.now();
+    persist();
+  };
+  el.querySelector('.tabs').addEventListener('click', (e) => {
+    const b = e.target.closest('.seg button');
+    if (!b) return;
+    for (const x of b.parentNode.children) x.classList.toggle('sel', x === b);
+    db.endless.tab = b.dataset.v;
+    persist();
+    mixForm.hidden = b.dataset.v !== 'mix';
+    customForm.hidden = b.dataset.v !== 'custom';
+    sfx.tap();
+  });
+  mixForm.addEventListener('click', (e) => {
+    const mech = e.target.closest('.mech');
+    const all = e.target.closest('[data-all]');
+    const b = e.target.closest('.seg button');
+    if (mech) {
+      const id = mech.dataset.m;
+      if (allowed.has(id)) allowed.delete(id);
+      else allowed.add(id);
+      mech.classList.toggle('on', allowed.has(id));
+    } else if (all) {
+      allowed.clear();
+      if (all.dataset.all === '1') MECHS.forEach((id) => allowed.add(id));
+      else allowed.add('classic');
+      for (const x of mixForm.querySelectorAll('.mech')) x.classList.toggle('on', allowed.has(x.dataset.m));
+    } else if (b) {
+      for (const x of b.parentNode.children) x.classList.toggle('sel', x === b);
+      m[b.parentNode.dataset.name] = +b.dataset.v;
+    } else return;
+    saveMix();
+    sfx.tap();
+  });
+  customForm.addEventListener('click', (e) => {
     const b = e.target.closest('.seg button');
     if (!b) return;
     const segEl = b.parentNode;
     for (const x of segEl.children) x.classList.toggle('sel', x === b);
     const name = segEl.dataset.name;
-    const v = b.dataset.v;
-    o[name] = name === 'diff' || name === 'c' ? +v : v;
-    db.endless.opts = o;
-    persist();
+    o[name] = name === 'diff' || name === 'c' ? +b.dataset.v : b.dataset.v;
+    saveCustom();
     sfx.tap();
   });
-  form.addEventListener('change', (e) => {
+  customForm.addEventListener('change', (e) => {
     const t = e.target;
-    if (t.dataset.name) {
-      o[t.dataset.name] = t.checked;
-      db.endless.opts = o;
-      persist();
-    }
+    if (!t.dataset.name) return;
+    o[t.dataset.name] = t.checked;
+    saveCustom();
   });
-  const start = async (opts) => {
-    const btn = el.querySelector('.new-btn');
+  const btn = el.querySelector('.new-btn');
+  btn.addEventListener('click', async () => {
+    const src = customForm.hidden ? 'mix' : 'custom';
     btn.disabled = true;
     btn.lastChild.textContent = 'Creating…';
-    const size = SIZES.find((s) => s.id === opts.size) || SIZES[1];
-    const params = {
-      w: size.w,
-      h: size.h,
-      c: opts.c,
-      diff: opts.diff,
-      nb: opts.nb,
-      sym: opts.sym || null,
-      wrap: opts.wrap,
-      silent: opts.silent,
-      mystery: opts.mystery,
-      seed: (Math.random() * 2 ** 31) >>> 0,
-      attempts: 6,
-    };
     try {
-      const p = await generateAsync(params);
-      setEndless(p);
+      const p = await generateAsync(src === 'mix' ? mixParams(m) : customParams(o));
+      setEndless(p, src);
       go('play/endless');
     } catch (err) {
       console.error(err);
-      toast('Could not create a puzzle. Try other settings.');
+      toast('Could not create a board. Try other settings.');
       btn.disabled = false;
-      btn.lastChild.textContent = 'New puzzle';
+      btn.lastChild.textContent = 'New board';
     }
-  };
-  el.querySelector('.new-btn').addEventListener('click', () => start(o));
-  el.querySelector('.surprise').addEventListener('click', () => {
-    const r = (a) => a[Math.floor(Math.random() * a.length)];
-    const s = {
-      size: r(['m', 'm', 'l', 'xl']),
-      diff: r([2, 3, 3]),
-      c: r([2, 2, 3, 4]),
-      nb: r(['king', 'king', 'king', 'cross', 'knight']),
-      sym: r(['', '', 'mirror', 'rot']),
-      wrap: Math.random() < 0.25,
-      silent: Math.random() < 0.25,
-      mystery: Math.random() < 0.3,
-    };
-    start(s);
   });
 }
 
@@ -582,7 +709,7 @@ function howtoScreen() {
       <p class="muted">Every puzzle has one solution, and you never need to guess.</p>
     </div>
     <h3 class="section">Rules you will meet</h3>
-    <div class="rule-list">${['c3', 'mirror', 'rot', 'silent', 'masks', 'cross', 'wrap', 'knight']
+    <div class="rule-list">${['c3', 'mirror', 'rot', 'cross', 'diag', 'silent', 'masks', 'contrast', 'wrap', 'knight', 'c4', 'shapes', 'tally']
       .map((r) => `<div class="card rule-item"><div class="rule-demo">${demo(r, cols)}</div><div><h3>${RULE_INFO[r].label}</h3><p>${RULE_INFO[r].desc}</p></div></div>`)
       .join('')}</div>
     <button class="btn primary big" data-go="${CAMPAIGN[0][0].id ? `play/${CAMPAIGN[0][0].id}` : 'campaign'}">${icon('play')}<span>Try the first puzzle</span></button>`,
@@ -611,6 +738,14 @@ function settingsScreen() {
         ${'vibrate' in navigator ? toggle('vibrate', 'Vibration', 'Light haptic taps', s.vibrate) : ''}
       </div>
     </div>
+    <div class="card form">
+      <h3>Progress</h3>
+      <div class="toggles">
+        ${toggle('unlockAll', 'Unlock everything', 'Open all worlds and levels', s.unlockAll)}
+      </div>
+      <p class="muted small">Progress is saved in this browser and never shrinks: an old window can only add to it. A backup code moves it to another browser, phone or the installed app.</p>
+      <div class="row wrap"><button class="btn export-btn">${icon('share')}Backup code</button><button class="btn import-btn">${icon('download')}Restore</button></div>
+    </div>
     <div class="card">
       <h3>App</h3>
       <div class="row wrap">${installButtonHtml()}<button class="btn danger reset-btn">${icon('restart')}Reset progress</button></div>
@@ -623,7 +758,7 @@ function settingsScreen() {
     if (b) {
       for (const x of b.parentNode.children) x.classList.toggle('sel', x === b);
       s.theme = b.dataset.v;
-      persist();
+      touchSettings();
       applyTheme();
       return;
     }
@@ -631,20 +766,71 @@ function settingsScreen() {
     if (p) {
       s.palette = p.dataset.pal;
       for (const x of form.querySelectorAll('.pal')) x.classList.toggle('sel', x === p);
-      persist();
+      touchSettings();
       applyTheme();
       sfx.tap();
     }
   });
-  form.addEventListener('change', (e) => {
+  el.addEventListener('change', (e) => {
     const t = e.target;
     if (!t.dataset.name) return;
     s[t.dataset.name] = t.checked;
-    persist();
+    touchSettings();
     applyTheme();
     if (t.checked && t.dataset.name === 'sound') sfx.paint(0);
   });
   wireInstall(el);
+  el.querySelector('.export-btn').addEventListener('click', () => {
+    persist(true);
+    const code = exportCode();
+    const n = Object.keys(db.done).filter((k) => !k.startsWith('endless-')).length;
+    const sh = sheet({
+      title: 'Backup code',
+      html: `<p>${n} solved puzzles. Keep this code somewhere safe, then use <b>Restore</b> in the other browser or app.</p><textarea class="code" readonly rows="5">${code}</textarea>`,
+      actions: [
+        navigator.share ? { label: 'Share', close: false, onClick: () => navigator.share({ text: code }).catch(() => {}) } : null,
+        {
+          label: 'Copy',
+          kind: 'primary',
+          close: false,
+          onClick: () => {
+            const ta = sh.el.querySelector('textarea');
+            ta.select();
+            (navigator.clipboard ? navigator.clipboard.writeText(code) : Promise.reject())
+              .then(() => toast('Backup code copied'))
+              .catch(() => {
+                document.execCommand?.('copy');
+                toast('Select the code and copy it');
+              });
+          },
+        },
+      ].filter(Boolean),
+    });
+  });
+  el.querySelector('.import-btn').addEventListener('click', () => {
+    const sh = sheet({
+      title: 'Restore progress',
+      html: '<p>Paste a backup code. Restoring only adds progress; nothing you have now is removed.</p><textarea class="code" rows="5" placeholder="HSW1:…"></textarea>',
+      actions: [
+        { label: 'Cancel' },
+        {
+          label: 'Restore',
+          kind: 'primary',
+          close: false,
+          onClick: () => {
+            try {
+              const added = importCode(sh.el.querySelector('textarea').value);
+              sh.close();
+              toast(added ? `Restored ${added} solved puzzle${added > 1 ? 's' : ''}` : 'Nothing new to restore');
+              applyTheme();
+            } catch {
+              toast('That code does not look right');
+            }
+          },
+        },
+      ],
+    });
+  });
   el.querySelector('.reset-btn').addEventListener('click', () => {
     sheet({
       title: 'Reset all progress?',
@@ -673,12 +859,12 @@ function playScreen(id) {
   let mode;
   let pl = null;
   if ((pl = parseLevel(id))) {
-    if (!levelUnlocked(pl.w, pl.l)) return go(`world/${pl.w}`, true);
+    if (!worldUnlocked(pl.w)) return go('campaign', true);
     mode = 'campaign';
     puzzle = CAMPAIGN[pl.w][pl.l];
     title = `${WORLDS[pl.w].name} <span>· ${pl.l + 1}</span>`;
-    parent = `world/${pl.w}`;
-    if (pl.w === 0) tip = WORLDS[0].tips[pl.l] || '';
+    parent = worldRoute(pl.w);
+    if (WORLDS[pl.w].tips) tip = WORLDS[pl.w].tips[pl.l] || '';
   } else if (id.startsWith('g-')) {
     mode = 'gallery';
     puzzle = GALLERY.find((g) => g.id === id);
@@ -698,13 +884,14 @@ function playScreen(id) {
     mode = 'endless';
     puzzle = db.endless.puzzle;
     if (!puzzle) return go('endless', true);
-    title = `Endless <span>· ${DIFF_NAMES[puzzle.diff]}</span>`;
+    title = `${puzzle.src === 'mix' ? 'Mix' : 'Endless'} <span>· ${DIFF_NAMES[puzzle.diff]}</span>`;
     parent = 'endless';
     saveKey = `endless-${puzzle.seed}`;
   } else return go('', true);
 
   if (mode === 'campaign' || mode === 'gallery') {
     db.last = id;
+    db.lastAt = Date.now();
     persist();
   }
   const el = screen('play', { title, parent, right: `<button class="icon-btn help-btn" aria-label="Rules">${icon('help')}</button>` }, '<div class="game-host"></div>');
@@ -724,13 +911,14 @@ function playScreen(id) {
     onRule: ruleSheet,
     onRestart: restartSheet,
     onSave: (state) => {
+      state.u = Date.now();
       saves[saveKey] = state;
       persist();
     },
     onWin: (res) => onWin(mode, id, puzzle, res, pl),
   });
   game.mount(host);
-  if (mode === 'campaign' && pl.w === 0 && pl.l < 2 && !saves[saveKey] && !db.done[id]) game.demoFocus();
+  if (mode === 'campaign' && WORLDS[pl.w].key === 1 && pl.l < 2 && !saves[saveKey] && !db.done[id]) game.demoFocus();
   el.querySelector('.help-btn').addEventListener('click', () => {
     const rules = rulesOf(puzzle);
     sheet({
@@ -741,8 +929,8 @@ function playScreen(id) {
       actions: [{ label: 'Full guide', onClick: () => go('howto') }, { label: 'Close', kind: 'primary' }],
     });
   });
-  if (mode === 'campaign' && pl.l === 0 && pl.w > 0 && !db.seen[WORLDS[pl.w].id] && !db.done[id]) {
-    db.seen[WORLDS[pl.w].id] = 1;
+  if (mode === 'campaign' && WORLDS[pl.w].intro && !db.seen[WORLDS[pl.w].id] && !db.done[id]) {
+    db.seen[WORLDS[pl.w].id] = Date.now();
     persist();
     const r = rulesOf(puzzle).find((x) => x !== 'classic') || 'classic';
     sheet({
@@ -773,9 +961,9 @@ function onWin(mode, id, puzzle, res, pl) {
     recordDone(id, res);
     const nowUnlocked = pl.w + 1 < WORLDS.length && worldUnlocked(pl.w + 1);
     const isLast = pl.l + 1 >= CAMPAIGN[pl.w].length;
-    const actions = [{ label: 'Levels', onClick: () => go(`world/${pl.w}`, true) }];
+    const actions = [{ label: 'Levels', onClick: () => go(worldRoute(pl.w), true) }];
     if (!isLast) actions.push({ label: 'Next level', kind: 'primary', onClick: () => go(`play/${CAMPAIGN[pl.w][pl.l + 1].id}`, true) });
-    else if (pl.w + 1 < WORLDS.length && nowUnlocked) actions.push({ label: `Next: ${WORLDS[pl.w + 1].name}`, kind: 'primary', onClick: () => go(`world/${pl.w + 1}`, true) });
+    else if (pl.w + 1 < WORLDS.length && nowUnlocked) actions.push({ label: `Next: ${WORLDS[pl.w + 1].name}`, kind: 'primary', onClick: () => go(worldRoute(pl.w + 1), true) });
     else actions.push({ label: 'Campaign', kind: 'primary', onClick: () => go('campaign', true) });
     show({
       title: pickCheer(),
@@ -800,7 +988,7 @@ function onWin(mode, id, puzzle, res, pl) {
     });
   } else if (mode === 'daily') {
     const key = pl.key;
-    if (!db.daily.history[key]) db.daily.history[key] = { t: Math.round(res.time), h: res.hints };
+    if (!db.daily.history[key]) db.daily.history[key] = { t: Math.round(res.time), h: res.hints, at: Date.now() };
     recordDone(`daily-${key}`, res);
     const st = streak(db.daily.history, key);
     show({
@@ -816,6 +1004,7 @@ function onWin(mode, id, puzzle, res, pl) {
     const first = recordDone(`endless-${puzzle.seed}`, res);
     if (first) {
       db.endless.solved[puzzle.diff] = (db.endless.solved[puzzle.diff] || 0) + 1;
+      db.endless.solvedAt = Date.now();
       persist();
     }
     show({
@@ -823,37 +1012,30 @@ function onWin(mode, id, puzzle, res, pl) {
       html: stats,
       actions: [
         { label: 'Settings', onClick: () => go('endless', true) },
-        { label: 'Another', kind: 'primary', onClick: () => anotherEndless() },
+        { label: 'Next board', kind: 'primary', onClick: () => anotherEndless() },
       ],
       cls: 'win',
     });
   }
 }
 
-function setEndless(p) {
-  const keep = `endless-${p.seed}`;
-  for (const k of Object.keys(db.saves)) if (k.startsWith('endless-') && k !== keep) delete db.saves[k];
-  for (const k of Object.keys(db.done)) if (k.startsWith('endless-') && k !== keep) delete db.done[k];
-  const cutoff = lastDays(14)[0];
-  for (const k of Object.keys(db.saves)) if (k.startsWith('daily-') && k.slice(6) < cutoff) delete db.saves[k];
+function setEndless(p, src) {
+  p.src = src;
   db.endless.puzzle = p;
+  db.endless.puzzleAt = Date.now();
   persist();
 }
 
 async function anotherEndless() {
-  const p = db.endless.puzzle;
-  const params = { w: p.w, h: p.h, c: p.c, diff: p.diff, nb: p.nb || 'king', sym: p.sym || null, wrap: !!p.wrap, silent: p.kind.includes('p'), mystery: p.kind.includes('m'), attempts: 6 };
-  const o = endlessOpts();
-  params.silent = o.silent || params.silent;
-  params.mystery = o.mystery || params.mystery;
-  params.seed = (Math.random() * 2 ** 31) >>> 0;
-  toast('Creating a new puzzle…', { ms: 1200 });
+  const src = db.endless.puzzle?.src === 'custom' ? 'custom' : 'mix';
+  const params = src === 'mix' ? mixParams(mixOpts()) : customParams(endlessOpts());
+  toast('Creating a new board…', { ms: 1200 });
   try {
-    setEndless(await generateAsync(params));
+    setEndless(await generateAsync(params), src);
     rendered = null;
     go('play/endless', true);
   } catch {
-    toast('Could not create a puzzle.');
+    toast('Could not create a board.');
   }
 }
 
@@ -865,6 +1047,10 @@ function pickCheer() {
 
 applyTheme();
 if (isStandalone()) navigator.storage?.persist?.().catch(() => {});
+onExternalChange(() => {
+  applyTheme();
+  if (!rendered || !rendered.startsWith('play/')) rerender();
+});
 initPWA({
   onUpdate: () => toast('Huesweeper was updated.', { action: 'Reload', onAction: () => location.reload(), ms: 8000 }),
 });

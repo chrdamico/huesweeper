@@ -35,6 +35,22 @@ export const RULE_INFO = {
     label: 'Knight',
     desc: 'Numbers count the cells a chess knight could jump to: two steps in one direction, then one step to the side.',
   },
+  diag: {
+    label: 'Diagonal',
+    desc: 'Numbers count only the 4 diagonal neighbours (marked \u00d7). The cells directly beside them do not count.',
+  },
+  contrast: {
+    label: 'Contrast',
+    desc: 'Numbers with a <b class="ne"></b>mark count the neighbours that have a DIFFERENT colour from their own cell. Plain numbers still count the same colour.',
+  },
+  shapes: {
+    label: 'Shapes',
+    desc: 'Each number has its own counting shape, shown by its corner mark: + the 4 sides, \u00d7 the 4 diagonals, L knight jumps, no mark all 8 around.',
+  },
+  tally: {
+    label: 'Tallies',
+    desc: 'Numbers outside the board count the cells of the first colour in that row or column. Tap one to light up its line.',
+  },
   wrap: {
     label: 'Wrap',
     desc: 'The board wraps around. The left edge touches the right edge, and the top edge touches the bottom.',
@@ -49,7 +65,11 @@ export function rulesOf(p) {
   if (p.sym === 'rot') out.push('rot');
   if (p.nb === 'cross') out.push('cross');
   if (p.nb === 'knight') out.push('knight');
+  if (p.nb === 'diag') out.push('diag');
+  if (p.nb === 'mixed') out.push('shapes');
   if (p.wrap) out.push('wrap');
+  if (p.tally && (!p.tl || p.tl.includes('1'))) out.push('tally');
+  if (p.inv && [...p.kind].some((k, i) => (k === 'g' || k === 'm') && p.inv[i] === '1')) out.push('contrast');
   if (p.kind.includes('p')) out.push('silent');
   if (p.kind.includes('m')) out.push('masks');
   if (!out.length) out.push('classic');

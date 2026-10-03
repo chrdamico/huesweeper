@@ -11,7 +11,7 @@ import { dailyParams } from '../public/js/daily.js';
 
 function playByHints(p) {
   const prep = prepare(p);
-  const model = buildModel(prep, p.kind);
+  const model = buildModel(prep, p.kind, p.tl);
   const board = new Int8Array(prep.N).fill(-1);
   for (let i = 0; i < prep.N; i++) if (!isEditable(p.kind[i])) board[i] = prep.sol[i];
   let steps = 0;
@@ -60,7 +60,7 @@ test('a week of daily puzzles generate and are solvable by hints', () => {
 test('hint flags a wrong cell first', () => {
   const p = CAMPAIGN[0][3];
   const prep = prepare(p);
-  const model = buildModel(prep, p.kind);
+  const model = buildModel(prep, p.kind, p.tl);
   const board = new Int8Array(prep.N).fill(-1);
   for (let i = 0; i < prep.N; i++) if (!isEditable(p.kind[i])) board[i] = prep.sol[i];
   const j = [...p.kind].lastIndexOf('.');

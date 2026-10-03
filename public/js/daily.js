@@ -20,9 +20,21 @@ export function keyToDate(key) {
   return new Date(y, m - 1, d);
 }
 
+const SCHEDULE_B = [
+  { name: 'Sunday Chimera', w: 8, h: 9, c: 2, diff: 3, nb: 'mixed', contrast: true, tally: true },
+  { name: 'Monday Diagonals', w: 7, h: 7, c: 2, diff: 2, nb: 'diag' },
+  { name: 'Tuesday Contrast', w: 8, h: 8, c: 2, diff: 3, contrast: true },
+  { name: 'Wednesday Tallies', w: 8, h: 8, c: 2, diff: 3, tally: true },
+  { name: 'Thursday Shapes', w: 8, h: 8, c: 2, diff: 3, nb: 'mixed' },
+  { name: 'Friday Torus', w: 7, h: 7, c: 2, diff: 3, nb: 'knight', wrap: true },
+  { name: 'Saturday Prism', w: 8, h: 8, c: 3, diff: 3, contrast: true, sym: 'mirror' },
+];
+
 export function dailyParams(key) {
-  const day = keyToDate(key).getDay();
-  const { name, ...opts } = SCHEDULE[day];
+  const date = keyToDate(key);
+  const day = date.getDay();
+  const week = Math.floor((Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 86400000 + 4) / 7);
+  const { name, ...opts } = (week % 2 ? SCHEDULE_B : SCHEDULE)[day];
   return { name, opts: { ...opts, seed: hashString(`daily:${key}`), attempts: 8 } };
 }
 

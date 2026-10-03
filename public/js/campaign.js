@@ -1,12 +1,25 @@
 const L = (w, h, diff, extra = {}) => ({ w, h, diff, ...extra });
 
+const MORE = [L(7, 7, 2), L(7, 8, 2), L(8, 8, 3), L(8, 9, 3), L(9, 9, 3), L(9, 10, 3), L(9, 11, 3), L(10, 12, 3)];
+
+const RAMP = [
+  L(5, 5, 1), L(5, 5, 1), L(6, 6, 1), L(6, 6, 2), L(6, 6, 2), L(7, 7, 2), L(7, 7, 2), L(7, 7, 2),
+  L(7, 8, 2), L(8, 8, 3), L(8, 8, 3), L(8, 9, 3), L(9, 9, 3), L(9, 10, 3), L(9, 11, 3), L(10, 12, 3),
+];
+
+const cycle = (levels, mixes) => levels.map((l, i) => ({ ...l, ...mixes[i % mixes.length] }));
+
+export const GROUPS = { basics: 'Basics', rules: 'New rules', mixed: 'Mixed worlds' };
+
 export const WORLDS = [
   {
+    key: 1,
     id: 'basics',
+    group: 'basics',
     name: 'First Light',
     tagline: 'Two colours, eight neighbours',
     rules: {},
-    levels: [L(4, 4, 1), L(5, 5, 1), L(5, 5, 1), L(6, 6, 1), L(6, 6, 2), L(7, 7, 2), L(7, 7, 2), L(8, 8, 2)],
+    levels: [L(4, 4, 1), L(5, 5, 1), L(5, 5, 1), L(6, 6, 1), L(6, 6, 2), L(7, 7, 2), L(7, 7, 2), L(8, 8, 2), ...MORE],
     tips: [
       'Each number counts how many of its 8 neighbours share its colour. Colour every empty cell to match all the numbers.',
       'Tap a number to see which cells it counts. Pick a colour below, then tap or drag over empty cells.',
@@ -17,73 +30,184 @@ export const WORLDS = [
     ],
   },
   {
+    key: 2,
     id: 'mirror',
+    group: 'basics',
     name: 'Mirror',
     tagline: 'The picture is symmetric',
     rules: { sym: 'mirror' },
     intro: 'The solution is mirror-symmetric: every cell matches its twin across the dotted line. Later boards use point symmetry around the centre instead.',
-    levels: [L(5, 5, 1), L(6, 6, 1), L(6, 6, 2), L(7, 7, 2), L(7, 7, 2, { sym: 'rot' }), L(8, 8, 2), L(8, 8, 3), L(9, 9, 3, { sym: 'rot' })],
+    levels: [
+      L(5, 5, 1), L(6, 6, 1), L(6, 6, 2), L(7, 7, 2), L(7, 7, 2, { sym: 'rot' }), L(8, 8, 2), L(8, 8, 3), L(9, 9, 3, { sym: 'rot' }),
+      ...cycle(MORE, [{}, { sym: 'rot' }]),
+    ],
   },
   {
+    key: 3,
     id: 'trio',
+    group: 'basics',
     name: 'Trio',
     tagline: 'Three colours',
     rules: { c: 3 },
     intro: 'Now there are three colours. A number still counts only neighbours of its own colour; the others can be either of the remaining two.',
-    levels: [L(4, 4, 1), L(5, 5, 1), L(5, 5, 2), L(6, 6, 2), L(6, 6, 2), L(7, 7, 3), L(7, 7, 3), L(8, 8, 3)],
+    levels: [L(4, 4, 1), L(5, 5, 1), L(5, 5, 2), L(6, 6, 2), L(6, 6, 2), L(7, 7, 3), L(7, 7, 3), L(8, 8, 3), ...MORE],
   },
   {
-    id: 'hush',
-    name: 'Hush',
-    tagline: 'Some givens keep quiet',
-    rules: { silent: true },
-    intro: 'Some coloured cells show no number. Their colour still counts for their neighbours, but they give no count of their own.',
-    levels: [L(5, 5, 1), L(6, 6, 1), L(6, 6, 2), L(7, 7, 2), L(7, 7, 2), L(8, 8, 3), L(8, 8, 3), L(9, 9, 3)],
-  },
-  {
-    id: 'masks',
-    name: 'Masks',
-    tagline: 'Numbers with hidden colours',
-    rules: { mystery: true },
-    intro: 'Grey numbered cells hide their colour. The number counts neighbours that share the hidden colour. Work out the colour and paint it.',
-    levels: [L(5, 5, 1), L(6, 6, 1), L(6, 6, 2), L(7, 7, 2), L(7, 7, 2), L(8, 8, 3), L(8, 8, 3), L(9, 9, 3)],
-  },
-  {
+    key: 6,
     id: 'cross',
+    group: 'rules',
     name: 'Crossroads',
     tagline: 'Only four neighbours',
     rules: { nb: 'cross' },
     intro: 'Numbers now count only the 4 cells directly above, below, left and right. Diagonals do not count.',
-    levels: [L(5, 5, 1), L(5, 5, 1), L(6, 6, 2), L(6, 6, 2), L(7, 7, 2), L(7, 7, 3), L(8, 8, 3), L(8, 8, 3)],
+    levels: [L(5, 5, 1), L(5, 5, 1), L(6, 6, 2), L(6, 6, 2), L(7, 7, 2), L(7, 7, 3), L(8, 8, 3), L(8, 8, 3), ...MORE],
   },
   {
+    key: 11,
+    id: 'diag',
+    group: 'rules',
+    name: 'Diagonals',
+    tagline: 'Only the four corners',
+    rules: { nb: 'diag' },
+    intro: 'Numbers count only the 4 diagonal neighbours. The cells directly beside a number do not count. Look for the small × mark.',
+    levels: RAMP,
+  },
+  {
+    key: 4,
+    id: 'hush',
+    group: 'rules',
+    name: 'Hush',
+    tagline: 'Some givens keep quiet',
+    rules: { silent: true },
+    intro: 'Some coloured cells show no number. Their colour still counts for their neighbours, but they give no count of their own.',
+    levels: [L(5, 5, 1), L(6, 6, 1), L(6, 6, 2), L(7, 7, 2), L(7, 7, 2), L(8, 8, 3), L(8, 8, 3), L(9, 9, 3), ...MORE],
+  },
+  {
+    key: 5,
+    id: 'masks',
+    group: 'rules',
+    name: 'Masks',
+    tagline: 'Numbers with hidden colours',
+    rules: { mystery: true },
+    intro: 'Striped numbered cells hide their colour. The number counts neighbours that share the hidden colour. Work out the colour and paint it.',
+    levels: [L(5, 5, 1), L(6, 6, 1), L(6, 6, 2), L(7, 7, 2), L(7, 7, 2), L(8, 8, 3), L(8, 8, 3), L(9, 9, 3), ...MORE],
+  },
+  {
+    key: 12,
+    id: 'contrast',
+    group: 'rules',
+    name: 'Contrast',
+    tagline: 'Count the odd ones out',
+    rules: { contrast: true },
+    intro: 'Numbers with a <b class="ne"></b>mark count the neighbours that have a DIFFERENT colour from their own cell. Plain numbers still count the same colour.',
+    levels: RAMP,
+  },
+  {
+    key: 7,
     id: 'wrap',
+    group: 'rules',
     name: 'Wraparound',
     tagline: 'The edges connect',
     rules: { wrap: true },
     intro: 'The board wraps around: the left edge touches the right edge, and the top touches the bottom. Every number has 8 neighbours.',
-    levels: [L(5, 5, 1), L(5, 5, 1), L(6, 6, 2), L(6, 6, 2), L(7, 7, 2), L(7, 7, 3), L(8, 8, 3), L(8, 8, 3)],
+    levels: [L(5, 5, 1), L(5, 5, 1), L(6, 6, 2), L(6, 6, 2), L(7, 7, 2), L(7, 7, 3), L(8, 8, 3), L(8, 8, 3), ...MORE],
   },
   {
+    key: 8,
     id: 'knight',
+    group: 'rules',
     name: 'Knight',
     tagline: 'Count like a chess knight',
     rules: { nb: 'knight' },
     intro: 'Numbers count the cells a chess knight could jump to: two steps one way, one step to the side. Tap a number to see its cells.',
-    levels: [L(5, 5, 1), L(5, 5, 1), L(6, 6, 2), L(6, 6, 2), L(7, 7, 2), L(7, 7, 3), L(8, 8, 3), L(8, 8, 3)],
+    levels: [L(5, 5, 1), L(5, 5, 1), L(6, 6, 2), L(6, 6, 2), L(7, 7, 2), L(7, 7, 3), L(8, 8, 3), L(8, 8, 3), ...MORE],
   },
   {
+    key: 9,
     id: 'quartet',
+    group: 'rules',
     name: 'Quartet',
     tagline: 'Four colours',
     rules: { c: 4 },
     intro: 'Four colours. Use notes to track which colours a cell can still be.',
-    levels: [L(4, 4, 1), L(5, 5, 1), L(5, 5, 2), L(6, 6, 2), L(6, 6, 2), L(7, 7, 3), L(7, 7, 3), L(8, 8, 3)],
+    levels: [L(4, 4, 1), L(5, 5, 1), L(5, 5, 2), L(6, 6, 2), L(6, 6, 2), L(7, 7, 3), L(7, 7, 3), L(8, 8, 3), ...MORE],
   },
   {
+    key: 13,
+    id: 'shapes',
+    group: 'rules',
+    name: 'Shapeshifter',
+    tagline: 'Every number counts its own way',
+    rules: { nb: 'mixed' },
+    intro: 'Each number has its own counting shape, shown by the mark in its corner: + the 4 sides, × the 4 diagonals, L knight jumps, no mark all 8 around. Tap a number to check.',
+    levels: RAMP,
+  },
+  {
+    key: 14,
+    id: 'tally',
+    group: 'rules',
+    name: 'Tallies',
+    tagline: 'Rows and columns keep count',
+    rules: { tally: true },
+    intro: 'Numbers outside the board tell how many cells of the first colour are in that row or column. Mix them with the clues on the board.',
+    levels: RAMP,
+  },
+  {
+    key: 15,
+    id: 'hall',
+    group: 'mixed',
+    name: 'Hall of Mirrors',
+    tagline: 'Symmetry meets masks',
+    rules: {},
+    intro: 'Symmetric boards with masked and silent cells. A hidden colour often shows up on the other side of the mirror.',
+    levels: cycle(RAMP, [{ sym: 'mirror', mystery: true }, { sym: 'rot', mystery: true }, { sym: 'mirror', silent: true }, { sym: 'rot', silent: true, mystery: true }]),
+  },
+  {
+    key: 16,
+    id: 'torus',
+    group: 'mixed',
+    name: 'Knight’s Torus',
+    tagline: 'Knight jumps on a wrapping board',
+    rules: {},
+    intro: 'Knight-move numbers on a board whose edges connect. Every number reaches 8 cells, wherever it sits.',
+    levels: cycle(RAMP, [{ nb: 'knight', wrap: true }, { nb: 'knight', wrap: true, sym: 'rot' }, { nb: 'knight', wrap: true, c: 3 }]),
+  },
+  {
+    key: 17,
+    id: 'prism',
+    group: 'mixed',
+    name: 'Prism',
+    tagline: 'Many colours, odd counts',
+    rules: {},
+    intro: 'Three and four colours with contrast numbers and diagonal counting.',
+    levels: cycle(RAMP, [{ c: 3, contrast: true }, { c: 3, nb: 'diag' }, { c: 3, contrast: true, nb: 'diag' }, { c: 4, contrast: true }]),
+  },
+  {
+    key: 18,
+    id: 'ledger',
+    group: 'mixed',
+    name: 'Ledger',
+    tagline: 'Tallies with a twist',
+    rules: {},
+    intro: 'Row and column tallies together with symmetry, a third colour, masks or wrapping edges.',
+    levels: cycle(RAMP, [{ tally: true, sym: 'mirror' }, { tally: true, c: 3 }, { tally: true, mystery: true }, { tally: true, wrap: true }]),
+  },
+  {
+    key: 19,
+    id: 'chimera',
+    group: 'mixed',
+    name: 'Chimera',
+    tagline: 'Shapes, contrast and masks',
+    rules: {},
+    intro: 'Every number has its own shape, some count differences, and some hide their colour.',
+    levels: cycle(RAMP, [{ nb: 'mixed', contrast: true }, { nb: 'mixed', mystery: true }, { nb: 'mixed', contrast: true, silent: true }, { nb: 'mixed', wrap: true, contrast: true }]),
+  },
+  {
+    key: 10,
     id: 'finale',
+    group: 'mixed',
     name: 'Grand Mix',
-    tagline: 'Rules combine',
+    tagline: 'Everything at once',
     rules: {},
     intro: 'Every board here mixes two or more rules. Check the rule chips above the board.',
     levels: [
@@ -95,16 +219,20 @@ export const WORLDS = [
       L(8, 8, 3, { wrap: true, sym: 'rot' }),
       L(7, 7, 3, { c: 4, silent: true }),
       L(9, 9, 3, { c: 3, sym: 'mirror', mystery: true }),
+      L(8, 8, 3, { nb: 'mixed', tally: true }),
+      L(8, 9, 3, { c: 3, contrast: true, sym: 'mirror' }),
+      L(9, 9, 3, { nb: 'diag', wrap: true, mystery: true }),
+      L(9, 9, 3, { c: 4, sym: 'rot', silent: true }),
+      L(9, 10, 3, { tally: true, nb: 'knight' }),
+      L(9, 11, 3, { nb: 'mixed', c: 3, sym: 'mirror' }),
+      L(10, 11, 3, { contrast: true, tally: true, mystery: true }),
+      L(10, 12, 3, { c: 3, nb: 'mixed', wrap: true, contrast: true }),
     ],
   },
 ];
 
-export const WORLD_UNLOCK = 4;
+export const WORLD_UNLOCK = 3;
 
-export function levelId(w, l) {
-  return `w${w + 1}-${l + 1}`;
-}
-
-export function worldRules(w, l) {
-  return { ...WORLDS[w].rules, ...WORLDS[w].levels[l] };
+export function levelId(key, l) {
+  return `w${key}-${l + 1}`;
 }

@@ -5,8 +5,8 @@ import { buildModel, solve } from '../public/js/solver.js';
 import { generatePuzzle, verifyPuzzle } from '../public/js/generator.js';
 import { mulberry32, randInt } from '../public/js/rng.js';
 
-function allSolutions(prep, kind, limit = 1e9) {
-  const { N, C, nbs, nums, sol, partner } = prep;
+function allSolutions(prep, kind, limit = 1e9, tl = null) {
+  const { N, C, nbs, nums, inv, sol, partner, tally, w, h } = prep;
   const val = new Int8Array(N).fill(-1);
   const vars = [];
   for (let i = 0; i < N; i++) {
@@ -30,12 +30,25 @@ function allSolutions(prep, kind, limit = 1e9) {
       if (last >= 0) checksAt[last].push(['s', i, p]);
     }
   }
+  const lines = [];
+  if (tally) {
+    for (let r = 0; r < h; r++) if (!tl || tl[r] === '1') lines.push([tally.rows[r], Array.from({ length: w }, (_, x) => r * w + x)]);
+    for (let c = 0; c < w; c++) if (!tl || tl[h + c] === '1') lines.push([tally.cols[c], Array.from({ length: h }, (_, y) => y * w + c)]);
+  }
+  lines.forEach((ln, k) => {
+    const last = Math.max(...ln[1].map((j) => pos[j]));
+    if (last >= 0) checksAt[last].push(['t', k]);
+  });
   const ok = (chk) => {
     if (chk[0] === 's') return val[chk[1]] === val[chk[2]];
+    if (chk[0] === 't') {
+      const [n, cells] = lines[chk[1]];
+      return cells.filter((j) => val[j] === 0).length === n;
+    }
     const i = chk[1];
-    let n = 0;
-    for (const j of nbs[i]) if (val[j] === val[i]) n++;
-    return n === nums[i];
+    let same = 0;
+    for (const j of nbs[i]) if (val[j] === val[i]) same++;
+    return (inv[i] ? nbs[i].length - same : same) === nums[i];
   };
   for (const i of cons) {
     if (pos[i] >= 0) continue;
@@ -76,6 +89,14 @@ const RULESETS = [
   { c: 2, nb: 'knight' },
   { c: 2, wrap: true, w: 5, h: 5 },
   { c: 3, nb: 'knight', wrap: true, w: 5, h: 5 },
+  { c: 2, nb: 'diag' },
+  { c: 2, nb: 'mixed' },
+  { c: 3, nb: 'mixed', wrap: true, w: 5, h: 5 },
+  { c: 2, contrast: true },
+  { c: 3, contrast: true, mystery: true },
+  { c: 2, tally: true },
+  { c: 3, tally: true, sym: 'mirror' },
+  { c: 2, tally: true, contrast: true, nb: 'mixed' },
 ];
 
 test('generated puzzles have exactly one solution, found by the solver', () => {
@@ -83,7 +104,7 @@ test('generated puzzles have exactly one solution, found by the solver', () => {
     for (let s = 1; s <= 6; s++) {
       const p = generatePuzzle({ w: rs.w || 4, h: rs.h || 5, diff: 3, seed: s * 7919, ...rs });
       const prep = prepare(p);
-      const sols = allSolutions(prep, p.kind, 2);
+      const sols = allSolutions(prep, p.kind, 2, p.tl);
       assert.equal(sols.count, 1, `unique: ${JSON.stringify(rs)} seed ${s}`);
       assert.deepEqual(sols[0], Array.from(prep.sol));
       assert.ok(verifyPuzzle(p));
@@ -104,6 +125,9 @@ test('solver never removes a colour that appears in some solution', () => {
     let sol = '';
     for (let i = 0; i < N; i++) sol += randInt(rng, c);
     const p = { w, h, c, nb: rs.nb, wrap: rs.wrap, sym: rs.sym, sol };
+    if (rs.nb === 'mixed') p.shapes = Array.from({ length: N }, () => 'kcdn'[randInt(rng, 4)]).join('');
+    if (rs.contrast) p.inv = Array.from({ length: N }, () => (rng() < 0.5 ? '1' : '0')).join('');
+    if (rs.tally) p.tally = true;
     const prep = prepare(p);
     if (rs.sym) {
       const arr = Array.from(prep.sol);
@@ -125,8 +149,9 @@ test('solver never removes a colour that appears in some solution', () => {
       }
     }
     kind = k.join('');
-    const sols = allSolutions(prep2, kind);
-    const res = solve(buildModel(prep2, kind), { maxLevel: 3 });
+    const tl = rs.tally ? Array.from({ length: h + w }, () => (rng() < 0.5 ? '1' : '0')).join('') : null;
+    const sols = allSolutions(prep2, kind, 1e9, tl);
+    const res = solve(buildModel(prep2, kind, tl), { maxLevel: 3 });
     assert.ok(res.ok, 'true solution exists so no contradiction');
     for (let i = 0; i < N; i++) assert.equal(res.dom[i] & sols.union[i], sols.union[i], `iter ${iter} cell ${i}`);
     if (res.solved) assert.equal(sols.count, 1);

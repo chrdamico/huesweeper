@@ -8,10 +8,11 @@ Each number counts how many of its neighbours share the number's own colour. Col
 
 ## Content
 
-- **Campaign**: 10 worlds × 8 levels. Each world adds a rule: mirror / point symmetry, 3 and 4 colours, silent givens (no number), masks (number with hidden colour), cross (4 neighbours), wraparound edges, knight moves, and mixes.
-- **Daily**: one seeded puzzle per day (same for everyone), a rule theme per weekday, streaks, share text.
-- **Endless**: random puzzles with your own size, difficulty and rule mix.
-- **Gallery**: 12 picture puzzles that reveal pixel art.
+- **Campaign**: 19 worlds × 16 levels (304). Rules: mirror / point symmetry, 3 and 4 colours, silent givens, masks (hidden colour), contrast (count different colours), cross, diagonal, knight, per-number shapes, row/column tallies, wraparound, plus 6 mixed worlds. Worlds unlock after 3 solves; Settings can unlock everything.
+- **Daily**: one seeded puzzle per day (same for everyone), a rule theme per weekday that alternates weekly, streaks, share text.
+- **Endless**: *Quick mix* (difficulty + allowed rules) or *Custom* (exact size and rules).
+- **Gallery**: 20 picture puzzles that reveal pixel art.
+- **Progress safety**: saves only merge (an old window cannot erase progress), a backup copy in storage, and export/import backup codes.
 - Hints that explain the deduction, undo/redo, notes, mistake highlighting, colour-blind symbols, 6 palettes, light/dark theme, sound and haptics.
 
 ## Develop

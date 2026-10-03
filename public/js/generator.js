@@ -33,14 +33,22 @@ export function randomSolution(w, h, c, sym, rng, clump = 0.3) {
 }
 
 function carve(prep, opts, rng) {
-  const { N } = prep;
+  const { N, w, h } = prep;
   const { diff, silent, mystery } = opts;
+  const tally = !!prep.tally;
   const kind = new Array(N).fill('g');
-  const ok = () => solve(buildModel(prep, kind), { maxLevel: diff }).solved;
-  const order = shuffle([...Array(N).keys()], rng);
+  const tl = tally ? new Array(h + w).fill('1') : null;
+  const ok = () => solve(buildModel(prep, kind, tl), { maxLevel: diff }).solved;
+  const order = shuffle([...Array(tally ? N + h + w : N).keys()], rng);
   const pm = opts.mysteryRate ?? 0.7;
   const ps = opts.silentRate ?? 0.7;
   for (const i of order) {
+    if (i >= N) {
+      if (rng() < 0.45) continue;
+      tl[i - N] = '0';
+      if (!ok()) tl[i - N] = '1';
+      continue;
+    }
     if (silent && rng() < 0.2) {
       kind[i] = 'p';
       if (ok()) continue;
@@ -61,7 +69,7 @@ function carve(prep, opts, rng) {
     }
     kind[i] = 'g';
   }
-  return kind;
+  return { kind, tl };
 }
 
 function stats(kind) {
@@ -71,6 +79,31 @@ function stats(kind) {
     else s[k]++;
   }
   return s;
+}
+
+const SHAPE_WEIGHTS = [['k', 0.35], ['c', 0.25], ['d', 0.25], ['n', 0.15]];
+
+function randomShapes(N, rng) {
+  let out = '';
+  for (let i = 0; i < N; i++) {
+    let r = rng();
+    let code = 'k';
+    for (const [k, wgt] of SHAPE_WEIGHTS) {
+      if (r < wgt) {
+        code = k;
+        break;
+      }
+      r -= wgt;
+    }
+    out += code;
+  }
+  return out;
+}
+
+function randomInv(N, rng, rate = 0.45) {
+  let out = '';
+  for (let i = 0; i < N; i++) out += rng() < rate ? '1' : '0';
+  return out;
 }
 
 export function generatePuzzle(opts) {
@@ -83,6 +116,8 @@ export function generatePuzzle(opts) {
     sym = null,
     silent = false,
     mystery = false,
+    contrast = false,
+    tally = false,
     diff = 2,
     seed = 1,
     sol = null,
@@ -93,17 +128,23 @@ export function generatePuzzle(opts) {
   for (let a = 0; a < attempts; a++) {
     const solArr = sol ? Uint8Array.from(sol) : randomSolution(w, h, c, sym, rng, opts.clump ?? 0.3);
     const base = { w, h, c, nb, wrap, sym, sol: Array.from(solArr).join('') };
+    if (nb === 'mixed') base.shapes = randomShapes(w * h, rng);
+    if (contrast) base.inv = randomInv(w * h, rng);
+    if (tally) base.tally = true;
     const prep = prepare(base);
-    const kind = carve(prep, { diff, silent, mystery, mysteryRate: opts.mysteryRate, silentRate: opts.silentRate }, rng);
-    const res = solve(buildModel(prep, kind), { maxLevel: diff });
+    const { kind, tl } = carve(prep, { diff, silent, mystery, mysteryRate: opts.mysteryRate, silentRate: opts.silentRate }, rng);
+    const res = solve(buildModel(prep, kind, tl), { maxLevel: diff });
     if (!res.solved) continue;
     const st = stats(kind);
-    const featureOk = (!silent || st.p > 0) && (!mystery || st.m > 0);
+    const contrastUsed = !contrast || kind.some((k, i) => (k === 'g' || k === 'm') && base.inv[i] === '1');
+    const tallyUsed = !tally || tl.includes('1');
+    const featureOk = (!silent || st.p > 0) && (!mystery || st.m > 0) && contrastUsed && tallyUsed;
     const score = (res.level === diff ? 10000 : res.level * 1000) + (featureOk ? 5000 : 0) + st.blank * 10 + st.p + st.m;
-    if (!best || score > best.score) best = { score, kind, base, level: res.level, st, featureOk };
+    if (!best || score > best.score) best = { score, kind, tl, base, level: res.level, st, featureOk };
     if (res.level === diff && featureOk) break;
   }
   const p = { ...best.base, kind: best.kind.join(''), diff, level: best.level, seed };
+  if (best.tl) p.tl = best.tl.join('');
   if (!p.wrap) delete p.wrap;
   if (!p.sym) delete p.sym;
   if (p.nb === 'king') delete p.nb;
@@ -112,7 +153,7 @@ export function generatePuzzle(opts) {
 
 export function verifyPuzzle(p) {
   const prep = prepare(p);
-  const res = solve(buildModel(prep, p.kind), { maxLevel: 3 });
+  const res = solve(buildModel(prep, p.kind, p.tl), { maxLevel: 3 });
   if (!res.solved) return false;
   for (let i = 0; i < prep.N; i++) if (res.dom[i] !== 1 << prep.sol[i]) return false;
   return true;

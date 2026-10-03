@@ -12,6 +12,8 @@ export function miniBoard({ w, colors, cells, size = 18, gap = 2, axis = null, c
       if (cell.stripe) k.push('stripe');
       if (cell.dim) k.push('dim');
       if (cell.inset) k.push('inset');
+      if (cell.tal) k.push('tal');
+      if (cell.empty) k.push('empty');
       return `<i class="${k.join(' ')}"${cell.c >= 0 ? ` data-c="${cell.c}"` : ''}>${cell.n ?? ''}</i>`;
     })
     .join('');
@@ -46,6 +48,8 @@ export function demo(rule, colors) {
           cell.c = -1;
           cell.stripe = true;
         }
+        if (opts.inv) cell.n = `<span><b class="ne"></b>${nbs[i].length - nums[i]}</span>`;
+        if (opts.mark) cell.n = `<span>${cell.n}<sup>${opts.mark}</sup></span>`;
       } else if (opts.nums?.includes(i)) cell.n = nums[i];
       if (src >= 0 && i !== src && !hl.has(i)) cell.dim = true;
       if (hl.has(i)) cell.hl = true;
@@ -75,6 +79,22 @@ export function demo(rule, colors) {
       return make(3, 3, '011 100 110', { src: 4, stripe: true });
     case 'silent':
       return make(3, 3, '011 100 110', { nums: [0, 8], inset: [] });
+    case 'diag':
+      return make(3, 3, '001 110 100', { src: 4, nb: 'diag', mark: '\u00d7' });
+    case 'contrast':
+      return make(3, 3, '011 100 110', { src: 4, inv: true });
+    case 'shapes':
+      return make(5, 5, '10110 01001 10010 00101 11010', { src: 12, nb: 'cross', size: 20, mark: '+' });
+    case 'tally': {
+      const sol = [[0, 1, 0], [1, 1, 0], [0, 0, 0]];
+      const cells = [{ c: -1, empty: true }];
+      for (let x = 0; x < 3; x++) cells.push({ c: -1, tal: true, n: sol.filter((r) => r[x] === 0).length });
+      for (let y = 0; y < 3; y++) {
+        cells.push({ c: -1, tal: true, n: sol[y].filter((v) => v === 0).length });
+        for (let x = 0; x < 3; x++) cells.push({ c: sol[y][x] });
+      }
+      return miniBoard({ w: 4, colors, cells, size: 24, gap: 3 });
+    }
     default:
       return '';
   }

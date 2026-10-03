@@ -1,7 +1,7 @@
-import { prepare, isEditable, hasClue } from './board.js';
+import { prepare, isEditable, hasClue, shapeAt, CODE_OF_SHAPE } from './board.js';
 import { hashString } from './rng.js';
 import { buildModel } from './solver.js';
-import { findHint, hintSources, hintText } from './hint.js';
+import { findHint, hintSources, hintLines, hintText } from './hint.js';
 import { applyPalette } from './palettes.js';
 import { sfx, buzz } from './sound.js';
 import { icon } from './icons.js';
@@ -19,13 +19,13 @@ export class Game {
     this.opts = opts;
     this.prep = prepare(puzzle);
     this.kind = puzzle.kind;
-    this.model = buildModel(this.prep, puzzle.kind);
+    this.model = buildModel(this.prep, puzzle.kind, puzzle.tl);
     const { N, sol } = this.prep;
     this.N = N;
     this.board = new Int8Array(N).fill(-1);
     this.notes = new Uint8Array(N);
     for (let i = 0; i < N; i++) if (!isEditable(this.kind[i])) this.board[i] = sol[i];
-    this.sig = hashString(puzzle.sol + puzzle.kind).toString(36);
+    this.sig = hashString(puzzle.sol + puzzle.kind + (puzzle.tl || '') + (puzzle.inv || '') + (puzzle.shapes || '')).toString(36);
     const saved = opts.saved && (!opts.saved.s || opts.saved.s === this.sig) ? opts.saved : null;
     if (saved && saved.b && saved.b.length === N) {
       for (let i = 0; i < N; i++) {
@@ -44,6 +44,8 @@ export class Game {
     this.notesMode = false;
     this.solved = false;
     this.focus = -1;
+    this.focusCells = new Set();
+    this.talEls = null;
     this.hint = null;
     this.stroke = null;
     this.pressTimer = 0;
@@ -60,7 +62,7 @@ export class Game {
       <div class="chips">${rules
         .map((r) => `<button class="chip" data-rule="${r}">${RULE_INFO[r].label}${icon('info', 'chip-i')}</button>`)
         .join('')}</div>
-      <div class="board-wrap"><div class="board" role="grid" aria-label="Puzzle board"></div></div>
+      <div class="board-wrap"><div class="frame"><div class="board" role="grid" aria-label="Puzzle board"></div></div></div>
       <div class="msg" aria-live="polite"></div>
       <div class="palette" role="toolbar" aria-label="Colours"></div>
       <div class="toolbar">
@@ -72,6 +74,7 @@ export class Game {
       </div>`;
     this.wrapEl = root.querySelector('.board-wrap');
     this.boardEl = root.querySelector('.board');
+    this.frameEl = root.querySelector('.frame');
     this.msgEl = root.querySelector('.msg');
     this.palEl = root.querySelector('.palette');
     this.buildBoard();
@@ -100,6 +103,7 @@ export class Game {
     if (this.isComplete() && this.isCorrect()) {
       this.solved = true;
       this.boardEl.classList.add('won', 'reveal');
+      this.frameEl.classList.add('reveal');
     } else this.resume();
     this.idle(true);
     this.updateTools();
@@ -152,11 +156,22 @@ export class Game {
   buildBoard() {
     const { w, h } = this.p;
     const b = this.boardEl;
-    b.style.setProperty('--w', w);
-    b.style.setProperty('--h', h);
+    const f = this.frameEl;
+    f.style.setProperty('--w', w);
+    f.style.setProperty('--h', h);
     if (this.p.wrap) b.classList.add('wrap');
-    if (this.p.nb && this.p.nb !== 'king') b.classList.add(`nb-${this.p.nb}`);
     if (this.p.c > 2) b.classList.add('multi');
+    this.staticCls = [];
+    for (let i = 0; i < this.N; i++) {
+      let sc = '';
+      if (hasClue(this.kind[i])) {
+        const sh = shapeAt(this.p, i);
+        if (sh !== 'king') sc += ` sh-${CODE_OF_SHAPE[sh]}`;
+        if (this.prep.inv[i]) sc += ' inv';
+      }
+      this.staticCls.push(sc);
+    }
+    if (this.prep.tally) this.buildTallies();
     const frag = document.createDocumentFragment();
     this.cells = [];
     for (let i = 0; i < this.N; i++) {
@@ -174,12 +189,37 @@ export class Game {
     }
     b.addEventListener('pointerdown', (e) => this.down(e));
     this.wrapEl.addEventListener('pointerdown', (e) => {
-      if (this.focus >= 0 && !e.target.closest('.cell')) this.setFocus(-1);
+      if (this.focus !== -1 && !e.target.closest('.cell, .tal')) this.setFocus(-1);
     });
     b.addEventListener('pointermove', (e) => this.move(e));
     b.addEventListener('pointerup', (e) => this.up(e));
     b.addEventListener('pointercancel', (e) => this.up(e, true));
     b.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  buildTallies() {
+    const { w, h, tl } = this.p;
+    const { rows, cols } = this.prep.tally;
+    const mk = (id, n, shown) => `<b class="tal${shown ? '' : ' hidden'}" data-t="${id}"><span>${shown ? n : ''}</span></b>`;
+    const colHtml = Array.from({ length: w }, (_, c) => mk(`c${c}`, cols[c], !tl || tl[h + c] === '1')).join('');
+    const rowHtml = Array.from({ length: h }, (_, r) => mk(`r${r}`, rows[r], !tl || tl[r] === '1')).join('');
+    const f = this.frameEl;
+    f.classList.add('has-tally');
+    f.insertAdjacentHTML('afterbegin', `<span class="tal-corner">${swatch(0)}</span><div class="tal-cols">${colHtml}</div><div class="tal-rows">${rowHtml}</div>`);
+    this.talEls = new Map([...f.querySelectorAll('.tal:not(.hidden)')].map((el) => [el.dataset.t, el]));
+    f.addEventListener('pointerdown', (e) => {
+      const t = e.target.closest('.tal');
+      if (!t || t.classList.contains('hidden') || this.solved) return;
+      e.preventDefault();
+      this.setFocus(this.focus === t.dataset.t ? -1 : t.dataset.t);
+      sfx.tap();
+    });
+  }
+
+  lineCells(id) {
+    const { w, h } = this.p;
+    const n = +id.slice(1);
+    return id[0] === 'r' ? Array.from({ length: w }, (_, x) => n * w + x) : Array.from({ length: h }, (_, y) => y * w + n);
   }
 
   buildPalette() {
@@ -218,15 +258,22 @@ export class Game {
     const r = this.wrapEl.getBoundingClientRect();
     if (!r.width || !r.height) return;
     const pad = this.p.wrap ? 14 : 4;
+    const hk = this.prep.tally ? 0.8 : 0;
+    const fit = (gap) => {
+      const extra = hk ? gap + 4 : 0;
+      return Math.floor(Math.min((r.width - pad * 2 - gap * (w - 1) - extra) / (w + hk), (r.height - pad * 2 - gap * (h - 1) - extra) / (h + hk)));
+    };
     let gap = 4;
-    let cell = Math.floor(Math.min((r.width - pad * 2 - gap * (w - 1)) / w, (r.height - pad * 2 - gap * (h - 1)) / h));
+    let cell = fit(gap);
     if (cell < 34) {
       gap = 3;
-      cell = Math.floor(Math.min((r.width - pad * 2 - gap * (w - 1)) / w, (r.height - pad * 2 - gap * (h - 1)) / h));
+      cell = fit(gap);
     }
     cell = Math.max(16, Math.min(cell, 72));
-    this.boardEl.style.setProperty('--cell', `${cell}px`);
-    this.boardEl.style.setProperty('--gap', `${gap}px`);
+    const f = this.frameEl;
+    f.style.setProperty('--cell', `${cell}px`);
+    f.style.setProperty('--gap', `${gap}px`);
+    f.style.setProperty('--hdr', `${Math.round(cell * hk)}px`);
   }
 
   cellAt(x, y) {
@@ -357,12 +404,12 @@ export class Game {
 
   releaseFocus(ch) {
     const f = this.focus;
-    if (f < 0) return;
-    const nbs = this.prep.nbs[f];
-    const inside = new Set(nbs);
-    inside.add(f);
+    if (f === -1) return;
+    const cells = [...this.focusCells];
+    const inside = new Set(cells);
+    if (typeof f === 'number') inside.add(f);
     const strayed = ch.some(([i]) => !inside.has(i));
-    const done = nbs.every((j) => this.board[j] >= 0);
+    const done = cells.every((j) => this.board[j] >= 0);
     if (strayed || done) this.setFocus(-1);
   }
 
@@ -416,6 +463,7 @@ export class Game {
     if (this.solved) {
       this.solved = false;
       this.boardEl.classList.remove('won', 'reveal');
+      this.frameEl.classList.remove('reveal');
       this.elapsed = 0;
       this.hints = 0;
       this.t0 = null;
@@ -450,7 +498,7 @@ export class Game {
     const el = this.cells[i];
     const k = this.kind[i];
     const v = this.board[i];
-    let cls = 'cell';
+    let cls = `cell${this.staticCls[i]}`;
     if (k === '.') cls += ' blank player';
     else if (k === 'g') cls += ' given clue';
     else if (k === 'p') cls += ' given plain';
@@ -480,20 +528,41 @@ export class Game {
     const col = this.board[i];
     if (col < 0) return '';
     const n = this.prep.nums[i];
-    let same = 0;
+    const inv = this.prep.inv[i] === 1;
+    let hit = 0;
     let open = 0;
     for (const j of this.prep.nbs[i]) {
       const v = this.board[j];
-      if (v === col) same++;
-      else if (v < 0) open++;
+      if (v < 0) open++;
+      else if ((v === col) !== inv) hit++;
     }
-    if (same > n || same + open < n) return 'err';
+    if (hit > n || hit + open < n) return 'err';
     if (open === 0) return 'ok';
     return '';
   }
 
+  refreshTallies(showErr) {
+    if (!this.talEls) return;
+    const { rows, cols } = this.prep.tally;
+    for (const [id, el] of this.talEls) {
+      const n = id[0] === 'r' ? rows[+id.slice(1)] : cols[+id.slice(1)];
+      let hit = 0;
+      let open = 0;
+      for (const j of this.lineCells(id)) {
+        const v = this.board[j];
+        if (v < 0) open++;
+        else if (v === 0) hit++;
+      }
+      let st = hit > n || hit + open < n ? 'err' : open === 0 ? 'ok' : '';
+      if (st === 'err' && !showErr) st = '';
+      el.classList.toggle('ok', st === 'ok');
+      el.classList.toggle('err', st === 'err');
+    }
+  }
+
   refreshClues() {
     const showErr = this.opts.settings.errors;
+    this.refreshTallies(showErr);
     for (let i = 0; i < this.N; i++) {
       if (!hasClue(this.kind[i])) continue;
       let st = this.clueState(i);
@@ -509,8 +578,10 @@ export class Game {
   setFocus(i) {
     const prev = this.focus;
     this.focus = i;
-    const set = new Set(i >= 0 ? this.prep.nbs[i] : []);
-    this.boardEl.classList.toggle('focusing', i >= 0);
+    const set = new Set(i === -1 ? [] : typeof i === 'number' ? this.prep.nbs[i] : this.lineCells(i));
+    this.focusCells = set;
+    this.boardEl.classList.toggle('focusing', i !== -1);
+    if (this.talEls) for (const [id, el] of this.talEls) el.classList.toggle('focus-src', id === i);
     for (let j = 0; j < this.N; j++) {
       const was = this.cells[j]._nb;
       const now = set.has(j);
@@ -575,6 +646,7 @@ export class Game {
     setTimeout(() => {
       if (this.dead) return;
       this.boardEl.classList.add('reveal');
+      this.frameEl.classList.add('reveal');
       this.idle(true);
     }, 650);
     this.opts.onWin?.(res);
@@ -602,6 +674,8 @@ export class Game {
     this.hint = h;
     const srcs = h.type === 'wrong' ? [] : hintSources(h);
     this.hintCells = [h.cell, ...srcs];
+    this.hintTal = h.type === 'wrong' || !this.talEls ? [] : hintLines(h).map((id) => this.talEls.get(id)).filter(Boolean);
+    for (const el of this.hintTal) el.classList.add('hint-src');
     this.cells[h.cell]._hint = h.type === 'wrong' ? 'hint-wrong' : 'hint-target';
     this.cells[h.cell].style.setProperty('--hc', `var(--c${h.color ?? 0})`);
     for (const s of srcs) if (s !== h.cell) this.cells[s]._hint = 'hint-src';
@@ -620,6 +694,8 @@ export class Game {
       this.updateCell(j);
     }
     this.hintCells = [];
+    for (const el of this.hintTal || []) el.classList.remove('hint-src');
+    this.hintTal = [];
     this.msgKind = '';
     this.idle(true);
   }

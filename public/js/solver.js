@@ -6,10 +6,12 @@ export function bitIndex(d) {
   return 31 - Math.clz32(d);
 }
 
-export function buildModel(prep, kind) {
-  const { N, C, nbs, nums, sol, partner } = prep;
+export function buildModel(prep, kind, tl = null) {
+  const { N, C, nbs, same, sol, partner, w, h, tally } = prep;
   const FULL = (1 << C) - 1;
   const cSrc = [];
+  const cCol = [];
+  const cTal = [];
   const cN = [];
   const cCells = [];
   const conOfSrc = new Int32Array(N).fill(-1);
@@ -18,8 +20,27 @@ export function buildModel(prep, kind) {
     if (k === 'g' || k === 'm') {
       conOfSrc[i] = cSrc.length;
       cSrc.push(i);
-      cN.push(nums[i]);
+      cCol.push(-1);
+      cTal.push(null);
+      cN.push(same[i]);
       cCells.push(nbs[i]);
+    }
+  }
+  if (tally) {
+    const line = (id, n, cells) => {
+      cSrc.push(-1);
+      cCol.push(0);
+      cTal.push(id);
+      cN.push(n);
+      cCells.push(Int32Array.from(cells));
+    };
+    for (let r = 0; r < h; r++) {
+      if (tl && tl[r] !== '1') continue;
+      line(`r${r}`, tally.rows[r], Array.from({ length: w }, (_, x) => r * w + x));
+    }
+    for (let c = 0; c < w; c++) {
+      if (tl && tl[h + c] !== '1') continue;
+      line(`c${c}`, tally.cols[c], Array.from({ length: h }, (_, y) => y * w + c));
     }
   }
   const M = cSrc.length;
@@ -61,6 +82,8 @@ export function buildModel(prep, kind) {
     FULL,
     M,
     cSrc: Int32Array.from(cSrc),
+    cCol: Int32Array.from(cCol),
+    cTal,
     cN: Int32Array.from(cN),
     cCells,
     conOfSrc,
@@ -154,7 +177,7 @@ function propagate(ctx) {
     const src = m.cSrc[c];
     const n = m.cN[c];
     const cells = m.cCells[c];
-    const ds = dom[src];
+    const ds = src >= 0 ? dom[src] : 1 << m.cCol[c];
     if (single(ds)) {
       let fixed = 0;
       let maybe = 0;
@@ -172,7 +195,7 @@ function propagate(ctx) {
       if (fixed === n) mode = 1;
       else if (fixed + maybe === n) mode = 2;
       if (!mode) continue;
-      ctx.begin(mode === 1 ? 'clear' : 'fill', { c, src, k: bitIndex(ds) });
+      ctx.begin(mode === 1 ? 'clear' : 'fill', { c, src, tal: m.cTal[c], k: bitIndex(ds) });
       for (let t = 0; t < cells.length; t++) {
         const j = cells[t];
         const d = dom[j];
@@ -252,8 +275,8 @@ function pairPass(ctx) {
   for (let p = 0; p < m.pairsA.length; p++) {
     const a = m.pairsA[p];
     const b = m.pairsB[p];
-    const sa = dom[m.cSrc[a]];
-    const sb = dom[m.cSrc[b]];
+    const sa = m.cSrc[a] >= 0 ? dom[m.cSrc[a]] : 1 << m.cCol[a];
+    const sb = m.cSrc[b] >= 0 ? dom[m.cSrc[b]] : 1 << m.cCol[b];
     if (!single(sa) || !single(sb)) continue;
     let K;
     if (m.C === 2) K = 1;
@@ -294,7 +317,7 @@ function pairPass(ctx) {
       else if (rb - minI === 0) bMode = 1;
     }
     if (!aMode && !bMode) continue;
-    ctx.begin('pair', { a, b, srcA: m.cSrc[a], srcB: m.cSrc[b], k: bitIndex(K) });
+    ctx.begin('pair', { a, b, srcA: m.cSrc[a], srcB: m.cSrc[b], talA: m.cTal[a], talB: m.cTal[b], k: bitIndex(K) });
     let ok = true;
     if (aMode) ok = applyGroup(ctx, ctx.la, nA, K, aMode === 2);
     if (ok && bMode) ok = applyGroup(ctx, ctx.lb, nB, K, bMode === 2);
