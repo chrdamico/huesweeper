@@ -2,7 +2,7 @@
   "name": "Huesweeper",
   "short_name": "Huesweeper",
   "description": "A colourful logic puzzle. Paint every cell so the numbers add up.",
-  "id": "./",
+  "id": "/huesweeper/",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
