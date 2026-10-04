@@ -11,7 +11,7 @@ import { dailyParams, dateKey, streak, lastDays } from './daily.js';
 import { miniBoard, pictureMini, silhouetteMini, demo } from './mini.js';
 import { sfx } from './sound.js';
 
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 const app = document.getElementById('app');
 const sheetRoot = document.getElementById('sheet-root');
 const toastEl = document.getElementById('toast');
@@ -203,27 +203,31 @@ function worldUnlocked(w) {
   return !!db.settings.unlockAll || w === 0 || worldSolved(w - 1) >= WORLD_UNLOCK;
 }
 
-function firstOpen(w) {
-  const l = CAMPAIGN[w].findIndex((p) => !db.done[p.id]);
-  return l;
+const LEVEL_INDEX = new Map();
+CAMPAIGN.forEach((levels, w) => levels.forEach((p, l) => LEVEL_INDEX.set(p.id, { w, l })));
+
+function firstOpen(w, challenges = true) {
+  return CAMPAIGN[w].findIndex((p) => !db.done[p.id] && (challenges || !p.ch));
 }
 
 function nextCampaignLevel() {
-  for (let w = 0; w < CAMPAIGN.length; w++) {
-    if (!worldUnlocked(w)) continue;
-    const l = firstOpen(w);
-    if (l >= 0) return { w, l };
+  for (const challenges of [false, true]) {
+    for (let w = 0; w < CAMPAIGN.length; w++) {
+      if (!worldUnlocked(w)) continue;
+      const l = firstOpen(w, challenges);
+      if (l >= 0) return { w, l };
+    }
   }
   return null;
 }
 
 function parseLevel(id) {
-  const m = id.match(/^w(\d+)-(\d+)$/);
-  if (!m) return null;
-  const w = WORLD_INDEX.get(+m[1]);
-  const l = +m[2] - 1;
-  if (w == null || !CAMPAIGN[w][l]) return null;
-  return { w, l };
+  return LEVEL_INDEX.get(id) || null;
+}
+
+function pips(p) {
+  if (p.ch) return `<span class="pips">${icon('flame')}</span>`;
+  return `<span class="pips">${[1, 2, 3].map((n) => `<i class="${n <= (p.level || 1) ? 'on' : ''}"></i>`).join('')}</span>`;
 }
 
 function worldRoute(w) {
@@ -275,7 +279,7 @@ function homeScreen() {
   let label = 'Play';
   if (target) {
     const pl = parseLevel(target);
-    label = pl ? `${WORLDS[pl.w].name} · Level ${pl.l + 1}` : GALLERY.find((g) => g.id === target)?.title ? 'Gallery puzzle' : 'Play';
+    label = pl ? `${WORLDS[pl.w].name} · ${CAMPAIGN[pl.w][pl.l].ch ? 'Challenge' : 'Level'} ${pl.l + 1}` : GALLERY.find((g) => g.id === target)?.title ? 'Gallery puzzle' : 'Play';
   }
   const today = dateKey();
   const dailyDone = !!db.daily.history[today];
@@ -345,15 +349,22 @@ function worldScreen(key) {
   const W = WORLDS[w];
   let rules = [...new Set(CAMPAIGN[w].flatMap((p) => rulesOf(p)))];
   if (rules.length > 1) rules = rules.filter((r) => r !== 'classic');
-  const curL = firstOpen(w);
-  const tiles = CAMPAIGN[w].map((p, l) => {
+  const curL = firstOpen(w, false) >= 0 ? firstOpen(w, false) : firstOpen(w);
+  const regular = CAMPAIGN[w].filter((p) => !p.ch);
+  const tile = (p) => {
+    const l = CAMPAIGN[w].indexOf(p);
     const d = db.done[p.id];
-    return `<button class="lvl ${d ? 'done' : ''} ${l === curL ? 'cur' : ''}" data-go="play/${p.id}" aria-label="Level ${l + 1}">
+    return `<button class="lvl ${d ? 'done' : ''} ${l === curL ? 'cur' : ''} ${p.ch ? 'chal' : ''}" data-go="play/${p.id}" aria-label="${p.ch ? 'Challenge' : 'Level'} ${l + 1}">
       <b>${l + 1}</b>
       <small>${p.w}×${p.h}</small>
+      ${pips(p)}
       ${d ? `<span class="lvl-badge">${d.h ? icon('check') : icon('star')}</span>` : ''}
     </button>`;
-  }).join('');
+  };
+  const challenges = CAMPAIGN[w].filter((p) => p.ch);
+  const tiles = `<div class="levels">${regular.map(tile).join('')}</div>${
+    challenges.length ? `<h3 class="section">Challenges</h3><p class="muted small chal-note">Optional: bigger, harder boards.</p><div class="levels">${challenges.map(tile).join('')}</div>` : ''
+  }`;
   const el = screen(
     'world',
     { title: W.name, parent: 'campaign' },
@@ -362,7 +373,7 @@ function worldScreen(key) {
       <div><h3>${W.tagline}</h3><p>${W.intro || RULE_INFO.classic.desc}</p>
       <div class="chips">${rules.map((r) => `<button class="chip" data-rule="${r}">${RULE_INFO[r].label}${icon('info', 'chip-i')}</button>`).join('')}</div></div>
     </div>
-    <div class="levels">${tiles}</div>`,
+    ${tiles}`,
   );
   el.querySelector('.chips').addEventListener('click', (e) => {
     const b = e.target.closest('.chip');
@@ -862,7 +873,7 @@ function playScreen(id) {
     if (!worldUnlocked(pl.w)) return go('campaign', true);
     mode = 'campaign';
     puzzle = CAMPAIGN[pl.w][pl.l];
-    title = `${WORLDS[pl.w].name} <span>· ${pl.l + 1}</span>`;
+    title = `${WORLDS[pl.w].name} <span>· ${puzzle.ch ? 'Challenge ' : ''}${pl.l + 1}</span>`;
     parent = worldRoute(pl.w);
     if (WORLDS[pl.w].tips) tip = WORLDS[pl.w].tips[pl.l] || '';
   } else if (id.startsWith('g-')) {
@@ -960,11 +971,15 @@ function onWin(mode, id, puzzle, res, pl) {
     const wasUnlocked = pl.w + 1 < WORLDS.length && worldUnlocked(pl.w + 1);
     recordDone(id, res);
     const nowUnlocked = pl.w + 1 < WORLDS.length && worldUnlocked(pl.w + 1);
-    const isLast = pl.l + 1 >= CAMPAIGN[pl.w].length;
+    const next = CAMPAIGN[pl.w][pl.l + 1];
+    const nextWorld = pl.w + 1 < WORLDS.length && nowUnlocked ? pl.w + 1 : -1;
     const actions = [{ label: 'Levels', onClick: () => go(worldRoute(pl.w), true) }];
-    if (!isLast) actions.push({ label: 'Next level', kind: 'primary', onClick: () => go(`play/${CAMPAIGN[pl.w][pl.l + 1].id}`, true) });
-    else if (pl.w + 1 < WORLDS.length && nowUnlocked) actions.push({ label: `Next: ${WORLDS[pl.w + 1].name}`, kind: 'primary', onClick: () => go(worldRoute(pl.w + 1), true) });
-    else actions.push({ label: 'Campaign', kind: 'primary', onClick: () => go('campaign', true) });
+    if (next && (!next.ch || puzzle.ch)) actions.push({ label: 'Next level', kind: 'primary', onClick: () => go(`play/${next.id}`, true) });
+    else {
+      if (next) actions.push({ label: 'Challenge', kind: nextWorld < 0 ? 'primary' : '', onClick: () => go(`play/${next.id}`, true) });
+      if (nextWorld >= 0) actions.push({ label: 'Next world', kind: 'primary', onClick: () => go(worldRoute(nextWorld), true) });
+      else if (!next) actions.push({ label: 'Campaign', kind: 'primary', onClick: () => go('campaign', true) });
+    }
     show({
       title: pickCheer(),
       html: `${stats}${!wasUnlocked && nowUnlocked ? `<p class="unlock">${icon('lock')} New world unlocked: <b>${WORLDS[pl.w + 1].name}</b></p>` : ''}`,

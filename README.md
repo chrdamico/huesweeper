@@ -8,7 +8,7 @@ Each number counts how many of its neighbours share the number's own colour. Col
 
 ## Content
 
-- **Campaign**: 19 worlds × 16 levels (304). Rules: mirror / point symmetry, 3 and 4 colours, silent givens, masks (hidden colour), contrast (count different colours), cross, diagonal, knight, per-number shapes, row/column tallies, wraparound, plus 6 mixed worlds. Worlds unlock after 3 solves; Settings can unlock everything.
+- **Campaign**: 19 worlds × 16 levels (304): 14 regular levels per world on a smooth difficulty curve, plus 2 optional Challenge levels. Rules: mirror / point symmetry, 3 and 4 colours, silent givens, masks (hidden colour), contrast (count different colours), cross, diagonal, knight, per-number shapes, row/column tallies, wraparound, plus 6 mixed worlds. Worlds unlock after 3 solves; Settings can unlock everything.
 - **Daily**: one seeded puzzle per day (same for everyone), a rule theme per weekday that alternates weekly, streaks, share text.
 - **Endless**: *Quick mix* (difficulty + allowed rules) or *Custom* (exact size and rules).
 - **Gallery**: 20 picture puzzles that reveal pixel art.
@@ -23,6 +23,8 @@ npm test               # solver, generator and level tests
 npm run levels         # regenerate public/js/levels-data.js after editing campaign.js or pictures.js
 npm run icons          # regenerate icons (needs Python + Pillow)
 ```
+
+`npm run levels` balances new levels against the originals by solver effort (`tools/difficulty-report.mjs` prints the comparison); `test/balance.test.mjs` keeps the original 80 levels unchanged and new levels no harder.
 
 `public/` is the whole site. Engine: `board.js` (rules), `solver.js` (constraint propagation, pair reasoning, trial), `generator.js` (carves clues from a full board while the solver still finishes), `hint.js`.
 
