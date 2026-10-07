@@ -10,8 +10,8 @@ import { generateAsync } from './gen-client.js';
 import { dailyParams, dateKey, streak, lastDays } from './daily.js';
 import { miniBoard, pictureMini, silhouetteMini, demo } from './mini.js';
 import { sfx } from './sound.js';
+import { VERSION } from './version.js';
 
-const VERSION = '1.2.0';
 const app = document.getElementById('app');
 const sheetRoot = document.getElementById('sheet-root');
 const toastEl = document.getElementById('toast');
@@ -760,7 +760,7 @@ function settingsScreen() {
     <div class="card">
       <h3>App</h3>
       <div class="row wrap">${installButtonHtml()}<button class="btn danger reset-btn">${icon('restart')}Reset progress</button></div>
-      <p class="muted small">Huesweeper ${VERSION}. Progress stays on this device. A fan-made puzzle inspired by <i>ColorSweeper</i>. Font: Nunito (SIL OFL).</p>
+      <p class="muted small">Huesweeper version ${VERSION}. Progress stays on this device. A fan-made puzzle inspired by <i>ColorSweeper</i>. Font: Nunito (SIL OFL).</p>
     </div>`,
   );
   const form = el.querySelector('.form');

@@ -1,5 +1,5 @@
 const VERSION = 'dev';
-const ASSETS = ["./app.webmanifest","./css/style.css","./fonts/nunito-latin.woff2","./icons/apple-touch-icon.png","./icons/favicon-32.png","./icons/favicon.svg","./icons/icon-192.png","./icons/icon-512.png","./icons/maskable-512.png","./index.html","./js/app.js","./js/board.js","./js/campaign.js","./js/daily.js","./js/game.js","./js/gen-client.js","./js/gen-worker.js","./js/generator.js","./js/hint.js","./js/icons.js","./js/levels-data.js","./js/mini.js","./js/palettes.js","./js/pictures.js","./js/pwa.js","./js/rng.js","./js/rules-info.js","./js/solver.js","./js/sound.js","./js/store.js"];
+const ASSETS = ["./app.webmanifest","./css/style.css","./fonts/nunito-latin.woff2","./icons/apple-touch-icon.png","./icons/favicon-32.png","./icons/favicon.svg","./icons/icon-192.png","./icons/icon-512.png","./icons/maskable-512.png","./index.html","./js/app.js","./js/board.js","./js/campaign.js","./js/daily.js","./js/game.js","./js/gen-client.js","./js/gen-worker.js","./js/generator.js","./js/hint.js","./js/icons.js","./js/levels-data.js","./js/mini.js","./js/palettes.js","./js/pictures.js","./js/pwa.js","./js/rng.js","./js/rules-info.js","./js/solver.js","./js/sound.js","./js/store.js","./js/version.js"];
 const CACHE = `huesweeper-${VERSION}`;
 const DEV = ['localhost', '127.0.0.1'].includes(self.location.hostname);
 
